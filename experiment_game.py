@@ -13,7 +13,8 @@ RIGHT_BG = "#f7f4ec"
 
 RIGHT_PANEL_PADDING = 10
 
-FIRE_INTERVAL_MS = 4000
+FIRE_INTERVAL_MIN_MS = 2500
+FIRE_INTERVAL_MAX_MS = 4500
 FIRE_SIZE = 26  # diameter-ish
 SCORE_START = 1000
 FIRE_SPAWN_SCORE_PENALTY = 10
@@ -103,6 +104,12 @@ class ExperimentGame:
         self.left_mouse_down = False
         self.pointer_x = 0
         self.pointer_y = 0
+        self.sprinkler_anim_after_id = None
+        self.sprinkler_animating = False
+        self.sprinkler_anim_end_at = 0.0
+        self.sprinkler_next_extinguish_at = 0.0
+        self.sprinkler_pending_fires = []
+        self.finish_overlay_after_sprinkler = False
         self.root.after(500, self.schedule_next_fire)
         self.root.after(1000, self.on_fire_tick)
         self.root.after(1000, self.on_timer_tick)
@@ -486,20 +493,115 @@ class ExperimentGame:
         if self.sprinkler_on:
             return
         self.sprinkler_on = True
+        self.game_over = True
         self.fires_paused = True
+        self.finish_overlay_after_sprinkler = True
         if self.valve_hold_after_id is not None:
             self.root.after_cancel(self.valve_hold_after_id)
             self.valve_hold_after_id = None
         self.active_valve_index = None
         self.active_valve_progress = 0.0
-        for tag in list(self.active_fires):
-            self.remove_fire(tag)
         self._draw_right_scene()
+        self._start_sprinkler_extinguish_animation()
+
+    def _start_sprinkler_extinguish_animation(self):
+        if self.sprinkler_anim_after_id is not None:
+            self.root.after_cancel(self.sprinkler_anim_after_id)
+            self.sprinkler_anim_after_id = None
+        self.sprinkler_pending_fires = list(self.active_fires)
+        random.shuffle(self.sprinkler_pending_fires)
+        self.sprinkler_animating = True
+        now = time.monotonic()
+        self.sprinkler_anim_end_at = now + 3.2
+        self.sprinkler_next_extinguish_at = now + 0.25
+        self._tick_sprinkler_extinguish_animation()
+
+    def _tick_sprinkler_extinguish_animation(self):
+        if not self.sprinkler_animating:
+            self.sprinkler_anim_after_id = None
+            return
+
+        self.left_canvas.delete("sprinkler_rain")
+        width = max(1, self.left_canvas.winfo_width())
+        height = max(1, self.left_canvas.winfo_height())
+        top_y = 8
+        rain_bottom = max(30, int(height * 0.48))
+        drop_count = max(16, width // 18)
+        for _ in range(drop_count):
+            x = random.randint(0, width)
+            y0 = random.randint(top_y, rain_bottom - 14)
+            y1 = y0 + random.randint(10, 20)
+            self.left_canvas.create_line(
+                x,
+                y0,
+                x - random.randint(1, 3),
+                y1,
+                fill="#8ed5ff",
+                width=2,
+                tags="sprinkler_rain"
+            )
+        self.left_canvas.tag_raise("sprinkler_rain")
+        self.left_canvas.tag_raise("bucket_cursor")
+
+        now = time.monotonic()
+        if now >= self.sprinkler_next_extinguish_at and self.sprinkler_pending_fires:
+            tag = self.sprinkler_pending_fires.pop(0)
+            center = self._fire_center(tag)
+            if center is not None:
+                self._draw_splash(center[0], center[1])
+            self.remove_fire(tag)
+            self.sprinkler_next_extinguish_at = now + 0.25
+
+        if now >= self.sprinkler_anim_end_at and not self.active_fires:
+            self.left_canvas.delete("sprinkler_rain")
+            self.sprinkler_animating = False
+            self.sprinkler_anim_after_id = None
+            if self.finish_overlay_after_sprinkler:
+                self.finish_overlay_after_sprinkler = False
+                self.show_end_overlay()
+            return
+
+        self.sprinkler_anim_after_id = self.root.after(90, self._tick_sprinkler_extinguish_animation)
+
+    def _fire_center(self, tag):
+        bbox = self.left_canvas.bbox(tag)
+        if bbox is None:
+            return None
+        x0, y0, x1, y1 = bbox
+        return ((x0 + x1) * 0.5, (y0 + y1) * 0.5)
+
+    def _draw_splash(self, x, y):
+        splash_tag = f"splash_{random.randint(10000, 99999)}"
+        self.left_canvas.create_oval(
+            x - 16,
+            y - 10,
+            x + 16,
+            y + 12,
+            fill="#8fd8fb",
+            outline="",
+            tags=(splash_tag, "sprinkler_splash")
+        )
+        for _ in range(6):
+            dx = random.randint(-18, 18)
+            dy = random.randint(-18, -4)
+            self.left_canvas.create_oval(
+                x + dx - 3,
+                y + dy - 3,
+                x + dx + 3,
+                y + dy + 3,
+                fill="#bcecff",
+                outline="",
+                tags=(splash_tag, "sprinkler_splash")
+            )
+        self.left_canvas.tag_raise("sprinkler_splash")
+        self.left_canvas.tag_raise("bucket_cursor")
+        self.root.after(220, lambda t=splash_tag: self.left_canvas.delete(t))
 
     def schedule_next_fire(self):
         if self.fires_paused:
             return
-        self.root.after(FIRE_INTERVAL_MS, self.spawn_fire)
+        delay_ms = int(random.uniform(FIRE_INTERVAL_MIN_MS, FIRE_INTERVAL_MAX_MS))
+        self.root.after(delay_ms, self.spawn_fire)
 
     def spawn_fire(self):
         if self.fires_paused:
@@ -645,6 +747,12 @@ class ExperimentGame:
             self.valve_hold_after_id = None
         if self.bucket_is_filling:
             self._cancel_bucket_fill()
+        if self.sprinkler_anim_after_id is not None:
+            self.root.after_cancel(self.sprinkler_anim_after_id)
+            self.sprinkler_anim_after_id = None
+        self.sprinkler_animating = False
+        self.left_canvas.delete("sprinkler_rain")
+        self.left_canvas.delete("sprinkler_splash")
         self.show_end_overlay()
 
     def update_score(self, delta):
@@ -655,7 +763,7 @@ class ExperimentGame:
 
     def on_fire_tick(self):
         if not self.fires_paused and self.active_fires:
-            self.update_score(-0.5 * len(self.active_fires))
+            self.update_score(-1 * len(self.active_fires))
         self.root.after(1000, self.on_fire_tick)
 
     def on_timer_tick(self):
@@ -1031,7 +1139,7 @@ class ExperimentGame:
             self.active_fires.remove(tag)
 
     def _format_score(self):
-        return f"{self.score:.1f}"
+        return str(int(self.score))
 
     def _format_time(self, total_seconds):
         minutes = total_seconds // 60
