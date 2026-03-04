@@ -12,6 +12,7 @@ LEFT_BG = "#7bc96f"
 RIGHT_BG = "#f7f4ec"
 
 RIGHT_PANEL_PADDING = 10
+WATER_LABEL_COLOR = "#d7ebfb"
 
 FIRE_INTERVAL_MIN_MS = 2500
 FIRE_INTERVAL_MAX_MS = 4500
@@ -99,6 +100,8 @@ class ExperimentGame:
         self.bucket_is_filling = False
         self.bucket_fill_after_id = None
         self.bucket_fill_anim_after_id = None
+        self.bucket_pour_after_id = None
+        self.bucket_pour_state = None
         self.bucket_fill_started_at = 0.0
         self.bucket_fill_progress = 0.0
         self.left_mouse_down = False
@@ -280,9 +283,9 @@ class ExperimentGame:
         )
         canvas.create_text(
             w * 0.5,
-            reservoir_top + 22,
+            reservoir_top + (reservoir_bottom - reservoir_top) * 0.42,
             text="UNDERGROUND RESERVOIR",
-            fill="#d7ebfb",
+            fill=WATER_LABEL_COLOR,
             font=("Georgia", 11, "bold")
         )
 
@@ -330,6 +333,19 @@ class ExperimentGame:
                 fill="#20262b",
                 font=("Georgia", 10, "bold"),
                 tags=("valve", f"valve_{idx}")
+            )
+            spin_active = (idx == self.active_valve_index)
+            spin_angle = 0.0
+            if spin_active:
+                spin_angle = (time.monotonic() * 40.0) % 360.0
+            self._draw_valve_wheel(
+                canvas,
+                valve_x,
+                y,
+                self.valve_radius + 6,
+                spin_angle,
+                spin_active,
+                idx
             )
 
         # Sprinkler at the top.
@@ -502,6 +518,7 @@ class ExperimentGame:
         self.active_valve_index = None
         self.active_valve_progress = 0.0
         self._draw_right_scene()
+        self.finish_overlay_after_sprinkler = True
         self._start_sprinkler_extinguish_animation()
 
     def _start_sprinkler_extinguish_animation(self):
@@ -512,8 +529,8 @@ class ExperimentGame:
         random.shuffle(self.sprinkler_pending_fires)
         self.sprinkler_animating = True
         now = time.monotonic()
-        self.sprinkler_anim_end_at = now + 3.2
-        self.sprinkler_next_extinguish_at = now + 0.25
+        self.sprinkler_anim_end_at = now + 3.0
+        self.sprinkler_next_extinguish_at = now + 0.2
         self._tick_sprinkler_extinguish_animation()
 
     def _tick_sprinkler_extinguish_animation(self):
@@ -526,7 +543,7 @@ class ExperimentGame:
         height = max(1, self.left_canvas.winfo_height())
         top_y = 8
         rain_bottom = max(30, int(height * 0.48))
-        drop_count = max(16, width // 18)
+        drop_count = max(18, width // 16)
         for _ in range(drop_count):
             x = random.randint(0, width)
             y0 = random.randint(top_y, rain_bottom - 14)
@@ -550,10 +567,11 @@ class ExperimentGame:
             if center is not None:
                 self._draw_splash(center[0], center[1])
             self.remove_fire(tag)
-            self.sprinkler_next_extinguish_at = now + 0.25
+            self.sprinkler_next_extinguish_at = now + 0.2
 
         if now >= self.sprinkler_anim_end_at and not self.active_fires:
             self.left_canvas.delete("sprinkler_rain")
+            self.left_canvas.delete("sprinkler_splash")
             self.sprinkler_animating = False
             self.sprinkler_anim_after_id = None
             if self.finish_overlay_after_sprinkler:
@@ -562,40 +580,6 @@ class ExperimentGame:
             return
 
         self.sprinkler_anim_after_id = self.root.after(90, self._tick_sprinkler_extinguish_animation)
-
-    def _fire_center(self, tag):
-        bbox = self.left_canvas.bbox(tag)
-        if bbox is None:
-            return None
-        x0, y0, x1, y1 = bbox
-        return ((x0 + x1) * 0.5, (y0 + y1) * 0.5)
-
-    def _draw_splash(self, x, y):
-        splash_tag = f"splash_{random.randint(10000, 99999)}"
-        self.left_canvas.create_oval(
-            x - 16,
-            y - 10,
-            x + 16,
-            y + 12,
-            fill="#8fd8fb",
-            outline="",
-            tags=(splash_tag, "sprinkler_splash")
-        )
-        for _ in range(6):
-            dx = random.randint(-18, 18)
-            dy = random.randint(-18, -4)
-            self.left_canvas.create_oval(
-                x + dx - 3,
-                y + dy - 3,
-                x + dx + 3,
-                y + dy + 3,
-                fill="#bcecff",
-                outline="",
-                tags=(splash_tag, "sprinkler_splash")
-            )
-        self.left_canvas.tag_raise("sprinkler_splash")
-        self.left_canvas.tag_raise("bucket_cursor")
-        self.root.after(220, lambda t=splash_tag: self.left_canvas.delete(t))
 
     def schedule_next_fire(self):
         if self.fires_paused:
@@ -657,7 +641,11 @@ class ExperimentGame:
         fire_tag = self._fire_tag_at_point(event.x, event.y)
         if fire_tag is not None:
             if self.bucket_is_full:
-                self.remove_fire(fire_tag)
+                center = self._fire_center(fire_tag)
+                if center is None:
+                    self.remove_fire(fire_tag)
+                else:
+                    self._start_bucket_pour_animation(event.x, event.y, center[0], center[1], fire_tag)
                 self.bucket_is_full = False
                 self._draw_bucket_cursor(event.x, event.y)
             return
@@ -718,6 +706,114 @@ class ExperimentGame:
                     return tag
         return None
 
+    def _fire_center(self, tag):
+        bbox = self.left_canvas.bbox(tag)
+        if bbox is None:
+            return None
+        x0, y0, x1, y1 = bbox
+        return ((x0 + x1) * 0.5, (y0 + y1) * 0.5)
+
+    def _start_bucket_pour_animation(self, source_x, source_y, target_x, target_y, fire_tag):
+        if self.bucket_pour_after_id is not None:
+            self.root.after_cancel(self.bucket_pour_after_id)
+            self.bucket_pour_after_id = None
+        self.left_canvas.delete("bucket_pour")
+        self.bucket_pour_state = {
+            "step": 0,
+            "steps": 6,
+            "sx": source_x,
+            "sy": source_y,
+            "tx": target_x,
+            "ty": target_y,
+            "fire_tag": fire_tag,
+        }
+        self._tick_bucket_pour_animation()
+
+    def _draw_splash(self, x, y):
+        splash_tag = f"splash_{random.randint(10000, 99999)}"
+        self.left_canvas.create_oval(
+            x - 14,
+            y - 9,
+            x + 14,
+            y + 11,
+            fill="#8fd8fb",
+            outline="",
+            tags=(splash_tag, "sprinkler_splash")
+        )
+        for _ in range(5):
+            dx = random.randint(-16, 16)
+            dy = random.randint(-16, -4)
+            self.left_canvas.create_oval(
+                x + dx - 3,
+                y + dy - 3,
+                x + dx + 3,
+                y + dy + 3,
+                fill="#bcecff",
+                outline="",
+                tags=(splash_tag, "sprinkler_splash")
+            )
+        self.left_canvas.tag_raise("sprinkler_splash")
+        self.left_canvas.tag_raise("bucket_cursor")
+        self.root.after(220, lambda t=splash_tag: self.left_canvas.delete(t))
+
+    def _tick_bucket_pour_animation(self):
+        state = self.bucket_pour_state
+        if state is None:
+            self.bucket_pour_after_id = None
+            return
+
+        step = state["step"]
+        steps = state["steps"]
+        sx = state["sx"]
+        sy = state["sy"]
+        tx = state["tx"]
+        ty = state["ty"]
+        fire_tag = state["fire_tag"]
+
+        direction = 1 if tx >= sx else -1
+        mouth_x = sx + direction * 12
+        mouth_y = sy + 8
+        mid_x = (mouth_x + tx) * 0.5 + direction * 10
+        mid_y = (mouth_y + ty) * 0.5 - 8
+
+        self.left_canvas.delete("bucket_pour")
+        self.left_canvas.create_line(
+            mouth_x,
+            mouth_y,
+            mid_x,
+            mid_y,
+            tx,
+            ty,
+            fill="#86cff7",
+            width=2,
+            smooth=True,
+            tags="bucket_pour"
+        )
+        for i in range(6):
+            u = i / 5.0
+            px = ((1 - u) * (1 - u) * mouth_x) + (2 * (1 - u) * u * mid_x) + (u * u * tx)
+            py = ((1 - u) * (1 - u) * mouth_y) + (2 * (1 - u) * u * mid_y) + (u * u * ty)
+            self.left_canvas.create_oval(
+                px - 1.8,
+                py - 1.8,
+                px + 1.8,
+                py + 1.8,
+                fill="#a9e1ff",
+                outline="",
+                tags="bucket_pour"
+            )
+        self.left_canvas.tag_raise("bucket_pour")
+        self.left_canvas.tag_raise("bucket_cursor")
+
+        if step >= steps - 1:
+            self.remove_fire(fire_tag)
+            self.bucket_pour_state = None
+            self.bucket_pour_after_id = self.root.after(90, lambda: self.left_canvas.delete("bucket_pour"))
+            return
+
+        state["step"] += 1
+        self.bucket_pour_after_id = self.root.after(45, self._tick_bucket_pour_animation)
+
     def _point_in_lake(self, x, y):
         x0, y0, x1, y1 = self.lake_bounds
         if x1 <= x0 or y1 <= y0:
@@ -747,6 +843,11 @@ class ExperimentGame:
             self.valve_hold_after_id = None
         if self.bucket_is_filling:
             self._cancel_bucket_fill()
+        if self.bucket_pour_after_id is not None:
+            self.root.after_cancel(self.bucket_pour_after_id)
+            self.bucket_pour_after_id = None
+        self.bucket_pour_state = None
+        self.left_canvas.delete("bucket_pour")
         if self.sprinkler_anim_after_id is not None:
             self.root.after_cancel(self.sprinkler_anim_after_id)
             self.sprinkler_anim_after_id = None
@@ -959,6 +1060,57 @@ class ExperimentGame:
                     fill="#5aa854",
                     tags="grass"
                 )
+        # Extra grass tufts for a more natural field texture.
+        for y in range(12, height, 20):
+            for x in range(8, width, 16):
+                base_x = x + random.randint(-2, 2)
+                base_y = y + random.randint(-2, 2)
+                h1 = random.randint(8, 14)
+                h2 = random.randint(10, 16)
+                h3 = random.randint(7, 13)
+                self.left_canvas.create_line(
+                    base_x,
+                    base_y,
+                    base_x - 3,
+                    base_y - h1,
+                    fill="#4e9b48",
+                    width=2,
+                    tags="grass"
+                )
+                self.left_canvas.create_line(
+                    base_x,
+                    base_y,
+                    base_x + 1,
+                    base_y - h2,
+                    fill="#5aa854",
+                    width=2,
+                    tags="grass"
+                )
+                self.left_canvas.create_line(
+                    base_x,
+                    base_y,
+                    base_x + 4,
+                    base_y - h3,
+                    fill="#66b95e",
+                    width=2,
+                    tags="grass"
+                )
+        for y in range(20, height, 28):
+            for x in range(14, width, 24):
+                bend = random.randint(-2, 2)
+                h = random.randint(9, 15)
+                self.left_canvas.create_line(
+                    x,
+                    y,
+                    x + bend,
+                    y - h * 0.55,
+                    x + bend + random.randint(-2, 2),
+                    y - h,
+                    fill="#5fae58",
+                    smooth=True,
+                    width=2,
+                    tags="grass"
+                )
 
         lake_w = max(140, int(width * 0.24))
         lake_h = max(90, int(height * 0.18))
@@ -991,7 +1143,7 @@ class ExperimentGame:
             (lake_x0 + lake_x1) * 0.5,
             (lake_y0 + lake_y1) * 0.5,
             text="LAKE",
-            fill="#1f4f78",
+            fill=WATER_LABEL_COLOR,
             font=("Georgia", 12, "bold"),
             tags="lake"
         )
@@ -1005,8 +1157,8 @@ class ExperimentGame:
         if x <= 0 and y <= 0:
             return
         self.left_canvas.delete("bucket_cursor")
-        offset_x = 14
-        offset_y = 14
+        offset_x = 12
+        offset_y = 12
         bx = x + offset_x
         by = y + offset_y
 
@@ -1014,44 +1166,85 @@ class ExperimentGame:
         if self.bucket_is_filling:
             body_fill = "#7fc4ed"
 
-        self.left_canvas.create_arc(
-            bx - 8,
-            by - 14,
-            bx + 16,
-            by + 12,
-            start=20,
-            extent=140,
-            style="arc",
+        rim_y = by - 2
+        top_w = 16
+        bottom_w = 11
+        body_h = 16
+        left_lug_x = bx - (top_w * 0.5) + 1.6
+        right_lug_x = bx + (top_w * 0.5) - 1.6
+        lug_y = rim_y + 0.8
+        lug_r = 2.1
+
+        # Handle connected directly to the side lugs.
+        self.left_canvas.create_line(
+            left_lug_x,
+            lug_y,
+            bx,
+            rim_y - 12,
+            right_lug_x,
+            lug_y,
+            fill="#555555",
+            width=2,
+            smooth=True,
+            tags="bucket_cursor"
+        )
+        self.left_canvas.create_oval(
+            left_lug_x - lug_r,
+            lug_y - lug_r,
+            left_lug_x + lug_r,
+            lug_y + lug_r,
+            fill="#8e98a2",
             outline="#555555",
+            width=1,
+            tags="bucket_cursor"
+        )
+        self.left_canvas.create_oval(
+            right_lug_x - lug_r,
+            lug_y - lug_r,
+            right_lug_x + lug_r,
+            lug_y + lug_r,
+            fill="#8e98a2",
+            outline="#555555",
+            width=1,
+            tags="bucket_cursor"
+        )
+
+        # Rim and body.
+        self.left_canvas.create_line(
+            bx - top_w * 0.5,
+            rim_y,
+            bx + top_w * 0.5,
+            rim_y,
+            fill="#555555",
             width=2,
             tags="bucket_cursor"
         )
         self.left_canvas.create_polygon(
-            bx - 2,
-            by - 2,
-            bx + 14,
-            by - 2,
-            bx + 12,
-            by + 14,
-            bx,
-            by + 14,
+            bx - top_w * 0.5,
+            rim_y,
+            bx + top_w * 0.5,
+            rim_y,
+            bx + bottom_w * 0.5,
+            rim_y + body_h,
+            bx - bottom_w * 0.5,
+            rim_y + body_h,
             fill=body_fill,
             outline="#555555",
             width=2,
             tags="bucket_cursor"
         )
         if self.bucket_is_filling:
-            water_top = by + 12 - int(11 * self.bucket_fill_progress)
+            water_top = rim_y + body_h - int(10 * self.bucket_fill_progress)
             self.left_canvas.create_rectangle(
-                bx + 1,
+                bx - 4.8,
                 water_top,
-                bx + 11,
-                by + 12,
+                bx + 4.8,
+                rim_y + body_h - 1,
                 fill="#8fd8fb",
                 outline="",
                 tags="bucket_cursor"
             )
-            shimmer_x = bx + 2 + int((time.monotonic() * 20) % 7)
+            shimmer_x = bx - 4 + int((time.monotonic() * 20) % 7)
             self.left_canvas.create_line(
                 shimmer_x,
                 water_top + 1,
@@ -1063,10 +1256,10 @@ class ExperimentGame:
             )
         elif self.bucket_is_full:
             self.left_canvas.create_rectangle(
-                bx + 1,
-                by + 1,
-                bx + 11,
-                by + 4,
+                bx - 4.8,
+                rim_y + 1,
+                bx + 4.8,
+                rim_y + 4,
                 fill="#86cff7",
                 outline="",
                 tags="bucket_cursor"
@@ -1092,6 +1285,47 @@ class ExperimentGame:
             jy = py + random.uniform(-jitter, jitter)
             points.extend([x + jx * size, y + jy * size])
         return points
+
+    def _draw_valve_wheel(self, canvas, x, y, radius, angle_deg, is_active, idx):
+        ring_color = "#d6dde2" if is_active else "#b2bcc4"
+        spoke_color = "#f4f7fa" if is_active else "#8f9aa2"
+        tags = ("valve", f"valve_{idx}")
+        canvas.create_oval(
+            x - radius,
+            y - radius,
+            x + radius,
+            y + radius,
+            outline=ring_color,
+            width=2,
+            tags=tags
+        )
+        inner = radius * 0.32
+        outer = radius * 0.86
+        for k in range(4):
+            theta = math.radians(angle_deg + k * 90.0)
+            x0 = x + math.cos(theta) * inner
+            y0 = y + math.sin(theta) * inner
+            x1 = x + math.cos(theta) * outer
+            y1 = y + math.sin(theta) * outer
+            canvas.create_line(
+                x0,
+                y0,
+                x1,
+                y1,
+                fill=spoke_color,
+                width=2,
+                tags=tags
+            )
+        canvas.create_oval(
+            x - inner * 0.8,
+            y - inner * 0.8,
+            x + inner * 0.8,
+            y + inner * 0.8,
+            fill="#6f7b82",
+            outline="#4f5960",
+            width=1,
+            tags=tags
+        )
 
     def _draw_log(self, x, y, length, thickness, angle_deg, color, highlight, tag, canvas):
         angle = math.radians(angle_deg)
