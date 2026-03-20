@@ -13,6 +13,8 @@ RIGHT_BG = "#f7f4ec"
 
 RIGHT_PANEL_PADDING = 10
 WATER_LABEL_COLOR = "#d7ebfb"
+RIGHT_UI_FONT = "Trebuchet MS"
+RIGHT_UI_FONT_ACCENT = "Palatino Linotype"
 
 FIRE_INTERVAL_MIN_MS = 2500
 FIRE_INTERVAL_MAX_MS = 4500
@@ -95,7 +97,10 @@ class ExperimentGame:
         self.fires_paused = False
         self.game_over = False
         self.active_fires = set()
+        self.fire_positions = {}
         self.lake_bounds = (0, 0, 0, 0)
+        self.left_sprinkler_center = (0, 0)
+        self.left_sprinkler_clear_radius = 42
         self.bucket_is_full = False
         self.bucket_is_filling = False
         self.bucket_fill_after_id = None
@@ -231,13 +236,20 @@ class ExperimentGame:
             outline=""
         )
 
-        # Water level rises from reservoir to sprinkler as valves are completed.
-        water_fraction = (self.completed_valves + self.active_valve_progress) / float(self.valve_total)
-        water_fraction = max(0.0, min(1.0, water_fraction))
-        total_column_top = riser_top
-        total_column_height = pipe_bottom - total_column_top
-        water_top = pipe_bottom - total_column_height * water_fraction
-        if water_fraction > 0.0:
+        level_spacing = (pipe_bottom - riser_top) / float(self.valve_total)
+        valve_ys = [pipe_bottom - (level_spacing * (idx + 1)) for idx in range(self.valve_total)]
+
+        # Water level rises to the actual height of each valve line.
+        if self.sprinkler_on:
+            water_top = riser_top
+        else:
+            water_stages = [pipe_bottom] + valve_ys
+            stage_index = min(self.completed_valves, self.valve_total - 1)
+            start_top = water_stages[stage_index]
+            end_top = water_stages[stage_index + 1]
+            progress = self.active_valve_progress if self.active_valve_index is not None else 0.0
+            water_top = start_top + ((end_top - start_top) * progress)
+        if water_top < pipe_bottom:
             main_top = max(water_top, pipe_top)
             if main_top < pipe_bottom:
                 canvas.create_rectangle(
@@ -286,66 +298,168 @@ class ExperimentGame:
             reservoir_top + (reservoir_bottom - reservoir_top) * 0.42,
             text="UNDERGROUND RESERVOIR",
             fill=WATER_LABEL_COLOR,
-            font=("Georgia", 11, "bold")
+            font=(RIGHT_UI_FONT, 11, "bold")
         )
 
-        # Four valves at equal distances.
+        # Four equal milestones in the pipe, with the control valves grouped
+        # together so the player reads the task as "one valve = one level".
         self.valve_centers = []
-        self.valve_radius = max(10, int(pipe_w * 0.32))
-        valve_track_top = pipe_top + (pipe_bottom - pipe_top) * 0.16
-        valve_track_bottom = pipe_bottom - (pipe_bottom - pipe_top) * 0.08
-        valve_spacing = (valve_track_bottom - valve_track_top) / max(1, self.valve_total - 1)
-        valve_x = pipe_x + pipe_w * 1.05
+        self.valve_radius = max(16, int(min(w, h) * 0.03))
         expected_idx = self.completed_valves
         for idx in range(self.valve_total):
-            y = valve_track_bottom - idx * valve_spacing
-            self.valve_centers.append((valve_x, y))
+            y = valve_ys[idx]
+            is_completed = idx < self.completed_valves
+            is_active = idx == expected_idx and self.active_valve_index == idx
+            is_next = idx == expected_idx and self.active_valve_index is None
+            if is_completed:
+                line_color = "#5bc16d"
+                badge_fill = "#7ec850"
+            elif is_active:
+                line_color = "#f0c65a"
+                badge_fill = "#e5b048"
+            elif is_next:
+                line_color = "#d49a45"
+                badge_fill = "#d1883b"
+            else:
+                line_color = "#7b858c"
+                badge_fill = "#6c757c"
+            guide_half_width = pipe_w * 0.7 if y >= pipe_top else riser_w * 1.6
             canvas.create_line(
-                pipe_x - pipe_w * 0.55,
+                pipe_x - guide_half_width,
                 y,
-                pipe_x + pipe_w * 0.55,
+                pipe_x + guide_half_width,
                 y,
-                fill="#5b666d",
-                width=5
+                fill=line_color,
+                width=6 if (is_active or is_next) else 4
             )
-            if idx < self.completed_valves:
+            badge_x = pipe_x - guide_half_width - 34
+            canvas.create_oval(
+                badge_x - 11,
+                y - 11,
+                badge_x + 11,
+                y + 11,
+                fill=badge_fill,
+                outline="#2f3438",
+                width=2
+            )
+            canvas.create_text(
+                badge_x,
+                y,
+                text=str(idx + 1),
+                fill="#20262b",
+                font=(RIGHT_UI_FONT, 10, "bold")
+            )
+
+        panel_left = int(max(pipe_x + pipe_w * 1.7, w * 0.56))
+        panel_right = w - 18
+        panel_bottom = int(min(h - 18, reservoir_top - 10))
+        panel_top = max(dirt_top + 24, panel_bottom - 230)
+        panel_center_x = (panel_left + panel_right) * 0.5
+        canvas.create_rectangle(
+            panel_left,
+            panel_top,
+            panel_right,
+            panel_bottom,
+            fill="#8b623d",
+            outline="#5d4028",
+            width=3
+        )
+        canvas.create_text(
+            panel_center_x,
+            panel_top + 18,
+            text="TURN VALVES 1 TO 4",
+            fill="#f7f1e3",
+            font=(RIGHT_UI_FONT_ACCENT, 13, "bold")
+        )
+        canvas.create_text(
+            panel_center_x,
+            panel_top + 36,
+            text="Each valve raises the water one level.",
+            fill="#f2dfc2",
+            font=(RIGHT_UI_FONT, 10, "normal")
+        )
+        valve_center_x = panel_left + 42
+        valve_stack_top = panel_top + 70
+        valve_stack_bottom = panel_bottom - 24
+        valve_spacing = (valve_stack_bottom - valve_stack_top) / max(1, self.valve_total - 1)
+        for idx in range(self.valve_total):
+            vx = valve_center_x
+            vy = valve_stack_bottom - idx * valve_spacing
+            self.valve_centers.append((vx, vy))
+            is_completed = idx < self.completed_valves
+            is_active = idx == expected_idx and self.active_valve_index == idx
+            is_next = idx == expected_idx and self.active_valve_index is None
+            if is_completed:
                 fill = "#7ec850"
-            elif idx == expected_idx and self.active_valve_index == idx:
+                label = "DONE"
+                label_color = "#d9ffd1"
+            elif is_active:
                 fill = "#e5b048"
-            elif idx == expected_idx:
+                label = "HOLD"
+                label_color = "#fff0b8"
+            elif is_next:
                 fill = "#d1883b"
+                label = "NEXT"
+                label_color = "#ffe1b3"
             else:
                 fill = "#6c757c"
+                label = "LOCKED"
+                label_color = "#d5d9dc"
+            if idx < self.valve_total - 1:
+                next_vy = valve_stack_bottom - (idx + 1) * valve_spacing
+                canvas.create_line(
+                    vx,
+                    next_vy + self.valve_radius + 8,
+                    vx,
+                    vy - self.valve_radius - 8,
+                    fill="#6a472a",
+                    width=5
+                )
             canvas.create_oval(
-                valve_x - self.valve_radius,
-                y - self.valve_radius,
-                valve_x + self.valve_radius,
-                y + self.valve_radius,
+                vx - self.valve_radius,
+                vy - self.valve_radius,
+                vx + self.valve_radius,
+                vy + self.valve_radius,
                 fill=fill,
                 outline="#2f3438",
                 width=2,
                 tags=("valve", f"valve_{idx}")
             )
             canvas.create_text(
-                valve_x,
-                y,
+                vx,
+                vy,
                 text=str(idx + 1),
                 fill="#20262b",
-                font=("Georgia", 10, "bold"),
+                font=(RIGHT_UI_FONT, 12, "bold"),
                 tags=("valve", f"valve_{idx}")
             )
-            spin_active = (idx == self.active_valve_index)
             spin_angle = 0.0
-            if spin_active:
+            if is_active:
                 spin_angle = (time.monotonic() * 40.0) % 360.0
             self._draw_valve_wheel(
                 canvas,
-                valve_x,
-                y,
-                self.valve_radius + 6,
+                vx,
+                vy,
+                self.valve_radius + 7,
                 spin_angle,
-                spin_active,
+                is_active,
                 idx
+            )
+            canvas.create_text(
+                vx + 34,
+                vy - 8,
+                text=f"VALVE {idx + 1}",
+                anchor="w",
+                fill="#f7f1e3",
+                font=(RIGHT_UI_FONT, 11, "bold")
+            )
+            canvas.create_text(
+                vx + 34,
+                vy + 10,
+                text=label,
+                anchor="w",
+                fill=label_color,
+                font=(RIGHT_UI_FONT, 10, "bold")
             )
 
         # Sprinkler at the top.
@@ -399,7 +513,7 @@ class ExperimentGame:
                 head_y - 34,
                 text="SPRINKLER ONLINE",
                 fill="#1e2a34",
-                font=("Georgia", 11, "bold")
+                font=(RIGHT_UI_FONT_ACCENT, 12, "bold")
             )
         else:
             canvas.create_line(
@@ -421,25 +535,52 @@ class ExperimentGame:
             canvas.create_text(
                 pipe_x,
                 head_y - 34,
-                text="SPRINKLER OFFLINE",
+                text="NO PRESSURE",
                 fill="#2c1a12",
-                font=("Georgia", 11, "bold")
+                font=(RIGHT_UI_FONT_ACCENT, 12, "bold")
             )
+
+        profile_left = 22
+        profile_right = w - 22
+        if self.fire_positions:
+            canvas.create_text(
+                (profile_left + profile_right) * 0.5,
+                ground_y - 30,
+                text="FIELD FIRES",
+                fill="#5a2d16",
+                font=(RIGHT_UI_FONT, 10, "bold")
+            )
+            left_width = max(1, self.left_canvas.winfo_width())
+            left_height = max(1, self.left_canvas.winfo_height())
+            surface_top = max(ground_y - 12, 8)
+            surface_bottom = dirt_top - 8
+            for tag, (fx, fy, _) in sorted(self.fire_positions.items(), key=lambda item: item[1][0]):
+                rel_x = max(0.0, min(1.0, fx / float(left_width)))
+                rel_y = max(0.0, min(1.0, fy / float(left_height)))
+                profile_x = profile_left + ((profile_right - profile_left) * rel_x)
+                profile_y = surface_top + ((surface_bottom - surface_top) * rel_y)
+                self._draw_fire_on_canvas(
+                    canvas,
+                    profile_x,
+                    profile_y,
+                    8,
+                    f"profile_{tag}"
+                )
 
         # Hold guidance text.
         if not self.sprinkler_on:
             current = min(self.completed_valves + 1, self.valve_total)
             if self.active_valve_index is not None:
                 remaining = max(0.0, (self.valve_hold_ms / 1000.0) - (time.monotonic() - self.active_valve_start))
-                info = f"Hold valve {current} for {remaining:0.1f}s"
+                info = f"Holding valve {current}: {remaining:0.1f}s left to reach level {current}"
             else:
-                info = f"Hold valve {current} for 10.0s"
+                info = f"Turn valve {current} to raise the water to level {current}"
             canvas.create_text(
                 w * 0.5,
                 h - 26,
                 text=info,
                 fill="#2b1d13",
-                font=("Georgia", 12, "bold")
+                font=(RIGHT_UI_FONT, 12, "bold")
             )
 
     def on_right_press(self, event):
@@ -541,19 +682,38 @@ class ExperimentGame:
         self.left_canvas.delete("sprinkler_rain")
         width = max(1, self.left_canvas.winfo_width())
         height = max(1, self.left_canvas.winfo_height())
-        top_y = 8
-        rain_bottom = max(30, int(height * 0.48))
-        drop_count = max(18, width // 16)
+        sprinkler_x, sprinkler_y = self.left_sprinkler_center
+        if sprinkler_x <= 0 and sprinkler_y <= 0:
+            sprinkler_x = width * 0.5
+            sprinkler_y = height * 0.5
+        drop_count = max(18, width // 22)
         for _ in range(drop_count):
-            x = random.randint(0, width)
-            y0 = random.randint(top_y, rain_bottom - 14)
-            y1 = y0 + random.randint(10, 20)
+            side = random.choice((-1, 1))
+            end_x = sprinkler_x + side * random.randint(45, max(46, int(width * 0.34)))
+            end_y = sprinkler_y - random.randint(20, max(21, int(height * 0.26)))
+            mid_x = (sprinkler_x + end_x) * 0.5 + side * random.randint(6, 18)
+            mid_y = min(sprinkler_y, end_y) - random.randint(2, 18)
             self.left_canvas.create_line(
-                x,
-                y0,
-                x - random.randint(1, 3),
-                y1,
+                sprinkler_x,
+                sprinkler_y,
+                mid_x,
+                mid_y,
+                end_x,
+                end_y,
                 fill="#8ed5ff",
+                width=2,
+                smooth=True,
+                tags="sprinkler_rain"
+            )
+            drip_x = end_x + random.randint(-8, 8)
+            drip_y0 = end_y + random.randint(0, 10)
+            drip_y1 = drip_y0 + random.randint(8, 18)
+            self.left_canvas.create_line(
+                drip_x,
+                drip_y0,
+                drip_x - random.randint(0, 2),
+                drip_y1,
+                fill="#bcecff",
                 width=2,
                 tags="sprinkler_rain"
             )
@@ -594,7 +754,7 @@ class ExperimentGame:
         width = self.left_canvas.winfo_width()
         height = self.left_canvas.winfo_height()
 
-        size = random.randint(int(FIRE_SIZE * 0.85), int(FIRE_SIZE * 1.25))
+        size = FIRE_SIZE
         margin = int(size * 1.4)
 
         if width < margin * 2 or height < margin * 2:
@@ -604,7 +764,7 @@ class ExperimentGame:
         x = random.randint(margin, width - margin)
         y = random.randint(margin, height - margin)
         for _ in range(20):
-            if not self._point_in_lake(x, y):
+            if not self._point_in_lake(x, y) and not self._point_in_left_sprinkler_zone(x, y):
                 break
             x = random.randint(margin, width - margin)
             y = random.randint(margin, height - margin)
@@ -614,8 +774,10 @@ class ExperimentGame:
 
         self._draw_fire(x, y, size, tag)
         self.active_fires.add(tag)
+        self.fire_positions[tag] = (x, y, size)
 
         self.update_score(-FIRE_SPAWN_SCORE_PENALTY)
+        self._draw_right_scene()
         self.schedule_next_fire()
 
     def on_left_motion(self, event):
@@ -827,6 +989,14 @@ class ExperimentGame:
         dx = (x - cx) / rx
         dy = (y - cy) / ry
         return dx * dx + dy * dy <= 1.0
+
+    def _point_in_left_sprinkler_zone(self, x, y):
+        sx, sy = self.left_sprinkler_center
+        if sx <= 0 and sy <= 0:
+            return False
+        dx = x - sx
+        dy = y - sy
+        return dx * dx + dy * dy <= self.left_sprinkler_clear_radius * self.left_sprinkler_clear_radius
 
     def show_end_overlay(self):
         self.end_label.config(text=self._format_score())
@@ -1148,8 +1318,54 @@ class ExperimentGame:
             tags="lake"
         )
 
+        sprinkler_x = int(width * 0.5)
+        sprinkler_y = int(height * 0.5)
+        self.left_sprinkler_center = (sprinkler_x, sprinkler_y)
+        self.left_canvas.create_rectangle(
+            sprinkler_x - 4,
+            sprinkler_y + 8,
+            sprinkler_x + 4,
+            sprinkler_y + 36,
+            fill="#6f7b82",
+            outline="#4f5960",
+            width=1,
+            tags="left_sprinkler"
+        )
+        self.left_canvas.create_oval(
+            sprinkler_x - 12,
+            sprinkler_y - 4,
+            sprinkler_x + 12,
+            sprinkler_y + 8,
+            fill="#7f8a92",
+            outline="#4f5960",
+            width=2,
+            tags="left_sprinkler"
+        )
+        self.left_canvas.create_line(
+            sprinkler_x - 16,
+            sprinkler_y + 2,
+            sprinkler_x + 16,
+            sprinkler_y + 2,
+            fill="#657077",
+            width=4,
+            capstyle="round",
+            tags="left_sprinkler"
+        )
+        for nozzle_x in (sprinkler_x - 16, sprinkler_x + 16):
+            self.left_canvas.create_oval(
+                nozzle_x - 4,
+                sprinkler_y - 2,
+                nozzle_x + 4,
+                sprinkler_y + 6,
+                fill="#59636a",
+                outline="#434c53",
+                width=1,
+                tags="left_sprinkler"
+            )
+
         self.left_canvas.tag_lower("grass")
         self.left_canvas.tag_raise("lake")
+        self.left_canvas.tag_raise("left_sprinkler")
         self.left_canvas.tag_raise("fire")
         self._draw_bucket_cursor(self.pointer_x, self.pointer_y)
 
@@ -1164,7 +1380,7 @@ class ExperimentGame:
 
         body_fill = "#58aee2" if self.bucket_is_full else "#b8c2cc"
         if self.bucket_is_filling:
-            body_fill = "#7fc4ed"
+            body_fill = "#96d8ff"
 
         rim_y = by - 2
         top_w = 16
@@ -1215,8 +1431,8 @@ class ExperimentGame:
             rim_y,
             bx + top_w * 0.5,
             rim_y,
-            fill="#555555",
-            width=2,
+            fill="#2e5870" if self.bucket_is_filling else "#555555",
+            width=3 if self.bucket_is_filling else 2,
             tags="bucket_cursor"
         )
         self.left_canvas.create_polygon(
@@ -1229,29 +1445,51 @@ class ExperimentGame:
             bx - bottom_w * 0.5,
             rim_y + body_h,
             fill=body_fill,
-            outline="#555555",
-            width=2,
+            outline="#2e5870" if self.bucket_is_filling else "#555555",
+            width=3 if self.bucket_is_filling else 2,
             tags="bucket_cursor"
         )
         if self.bucket_is_filling:
-            water_top = rim_y + body_h - int(10 * self.bucket_fill_progress)
+            fill_height = int((body_h - 2) * self.bucket_fill_progress)
+            water_top = rim_y + body_h - 1 - fill_height
             self.left_canvas.create_rectangle(
-                bx - 4.8,
+                bx - 5.5,
                 water_top,
-                bx + 4.8,
+                bx + 5.5,
                 rim_y + body_h - 1,
-                fill="#8fd8fb",
+                fill="#57c7ff",
                 outline="",
                 tags="bucket_cursor"
             )
-            shimmer_x = bx - 4 + int((time.monotonic() * 20) % 7)
+            shimmer_x = bx - 5 + int((time.monotonic() * 24) % 9)
             self.left_canvas.create_line(
                 shimmer_x,
                 water_top + 1,
-                shimmer_x + 4,
+                shimmer_x + 5,
                 water_top + 1,
                 fill="#d8f3ff",
-                width=1,
+                width=2,
+                tags="bucket_cursor"
+            )
+            pulse_extent = max(8, int(360 * self.bucket_fill_progress))
+            self.left_canvas.create_arc(
+                bx - 16,
+                rim_y - 18,
+                bx + 16,
+                rim_y + 14,
+                start=90,
+                extent=-pulse_extent,
+                style="arc",
+                outline="#ffffff",
+                width=3,
+                tags="bucket_cursor"
+            )
+            self.left_canvas.create_text(
+                bx,
+                rim_y - 21,
+                text=f"{int(self.bucket_fill_progress * 100)}%",
+                fill="#ffffff",
+                font=("Georgia", 9, "bold"),
                 tags="bucket_cursor"
             )
         elif self.bucket_is_full:
@@ -1371,6 +1609,8 @@ class ExperimentGame:
         self.left_canvas.delete(tag)
         if tag in self.active_fires:
             self.active_fires.remove(tag)
+        self.fire_positions.pop(tag, None)
+        self._draw_right_scene()
 
     def _format_score(self):
         return str(int(self.score))
