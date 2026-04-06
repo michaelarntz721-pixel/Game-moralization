@@ -18,7 +18,7 @@ TIMER_SECONDS = 60
 class FireTutorialGame:
     def __init__(self, root):
         self.root = root
-        self.root.title("Tutorial - Fire")
+        self.root.title("Tutoriál - Oheň")
         self.root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
         self.root.configure(bg=BG_COLOR)
 
@@ -44,22 +44,22 @@ class FireTutorialGame:
 
         self.container = tk.Frame(root, bg=BG_COLOR)
         self.container.pack(fill="both", expand=True)
-        self.container.rowconfigure(0, weight=0, minsize=86)
+        self.container.rowconfigure(0, weight=0, minsize=132)
         self.container.rowconfigure(1, weight=1)
         self.container.columnconfigure(0, weight=1)
 
-        self.header = tk.Frame(self.container, bg=BG_COLOR, height=86)
+        self.header = tk.Frame(self.container, bg=BG_COLOR, height=132)
         self.header.grid(row=0, column=0, sticky="ew")
         self.header.grid_propagate(False)
 
         self.title_label = tk.Label(
             self.header,
-            text="FIRE TUTORIAL",
+            text="TUTORIÁL OHNĚ",
             font=("Trebuchet MS", 26, "bold"),
             bg=BG_COLOR,
             fg="#8b2f17",
         )
-        self.title_label.place(relx=0.5, rely=0.38, anchor="center")
+        self.title_label.place(relx=0.5, rely=0.24, anchor="center")
 
         self.timer_label = tk.Label(
             self.header,
@@ -68,16 +68,22 @@ class FireTutorialGame:
             bg=BG_COLOR,
             fg="#2b2b2b",
         )
-        self.timer_label.place(relx=0.98, rely=0.4, anchor="e")
+        self.timer_label.place(relx=0.98, rely=0.24, anchor="e")
 
         self.help_label = tk.Label(
             self.header,
-            text="Fill the bucket at the lake, then click a fire to put it out.",
-            font=("Trebuchet MS", 13, "bold"),
+            text=(
+                "Cíl: uhasit co nejvíc ohňů. Přesuňte kbelík nad jezero a držte ho tam 2 sekundy,\n"
+                "dokud se nenaplní. Potom klikněte na oheň a vylijete vodu. Na každý oheň je potřeba\n"
+                "jedno plné nabití kbelíku, takže po každém uhašení musíte znovu k jezeru."
+            ),
+            font=("Trebuchet MS", 12, "bold"),
             bg=BG_COLOR,
             fg="#4f3c2f",
+            justify="center",
+            wraplength=900,
         )
-        self.help_label.place(relx=0.5, rely=0.84, anchor="center")
+        self.help_label.place(relx=0.5, rely=0.72, anchor="center")
 
         self.canvas = tk.Canvas(
             self.container,
@@ -96,7 +102,7 @@ class FireTutorialGame:
         self.end_overlay.place_forget()
         self.end_title = tk.Label(
             self.end_overlay,
-            text="TIME UP",
+            text="ČAS VYPRŠEL",
             font=("Trebuchet MS", 22, "bold"),
             bg=BG_COLOR,
             fg="#4f3c2f",
@@ -104,7 +110,7 @@ class FireTutorialGame:
         self.end_title.place(relx=0.5, rely=0.34, anchor="center")
         self.end_label = tk.Label(
             self.end_overlay,
-            text="Fire practice complete",
+            text="Trénink hašení dokončen",
             font=("Trebuchet MS", 28, "bold"),
             bg=BG_COLOR,
             fg="#c1121f",
@@ -513,7 +519,7 @@ class FireTutorialGame:
         self.canvas.create_text(
             (lake_x0 + lake_x1) * 0.5,
             (lake_y0 + lake_y1) * 0.5,
-            text="LAKE",
+            text="JEZERO",
             fill=WATER_LABEL_COLOR,
             font=("Georgia", 12, "bold"),
             tags="lake",

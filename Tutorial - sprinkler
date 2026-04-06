@@ -18,7 +18,7 @@ VALVE_HOLD_MS = 10000
 class SprinklerTutorialGame:
     def __init__(self, root):
         self.root = root
-        self.root.title("Tutorial - Sprinkler")
+        self.root.title("Tutoriál - Postřikovač")
         self.root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
         self.root.configure(bg=BG_COLOR)
 
@@ -38,22 +38,22 @@ class SprinklerTutorialGame:
         self.sprinkler_anim_end_at = 0.0
         self.container = tk.Frame(root, bg=BG_COLOR)
         self.container.pack(fill="both", expand=True)
-        self.container.rowconfigure(0, weight=0, minsize=86)
+        self.container.rowconfigure(0, weight=0, minsize=132)
         self.container.rowconfigure(1, weight=1)
         self.container.columnconfigure(0, weight=1)
 
-        self.header = tk.Frame(self.container, bg=BG_COLOR, height=86)
+        self.header = tk.Frame(self.container, bg=BG_COLOR, height=132)
         self.header.grid(row=0, column=0, sticky="ew")
         self.header.grid_propagate(False)
 
         self.title_label = tk.Label(
             self.header,
-            text="SPRINKLER TUTORIAL",
+            text="TUTORIÁL POSTŘIKOVAČE",
             font=("Trebuchet MS", 26, "bold"),
             bg=BG_COLOR,
             fg="#37515e",
         )
-        self.title_label.place(relx=0.5, rely=0.38, anchor="center")
+        self.title_label.place(relx=0.5, rely=0.24, anchor="center")
 
         self.timer_label = tk.Label(
             self.header,
@@ -62,16 +62,22 @@ class SprinklerTutorialGame:
             bg=BG_COLOR,
             fg="#2b2b2b",
         )
-        self.timer_label.place(relx=0.98, rely=0.38, anchor="e")
+        self.timer_label.place(relx=0.98, rely=0.24, anchor="e")
 
         self.help_label = tk.Label(
             self.header,
-            text="Hold valve 1, then 2, then 3, then 4 to build pressure.",
-            font=("Trebuchet MS", 13, "bold"),
+            text=(
+                "Cíl: spustit postřikovač. Stiskněte a držte vždy správný ventil po dobu 10 sekund,\n"
+                "aby voda vystoupala o jednu úroveň. Začíná se ventilem 1, potom 2, potom 3 a nakonec 4.\n"
+                "Když tlačítko pustíte moc brzy nebo zkusíte špatný ventil, postup se pro ten krok přeruší."
+            ),
+            font=("Trebuchet MS", 12, "bold"),
             bg=BG_COLOR,
             fg="#4f3c2f",
+            justify="center",
+            wraplength=900,
         )
-        self.help_label.place(relx=0.5, rely=0.84, anchor="center")
+        self.help_label.place(relx=0.5, rely=0.72, anchor="center")
 
         self.canvas = tk.Canvas(
             self.container,
@@ -88,7 +94,7 @@ class SprinklerTutorialGame:
         self.end_overlay.place_forget()
         self.end_title = tk.Label(
             self.end_overlay,
-            text="TIME UP",
+            text="ČAS VYPRŠEL",
             font=("Trebuchet MS", 22, "bold"),
             bg=BG_COLOR,
             fg="#4f3c2f",
@@ -96,7 +102,7 @@ class SprinklerTutorialGame:
         self.end_title.place(relx=0.5, rely=0.34, anchor="center")
         self.end_label = tk.Label(
             self.end_overlay,
-            text="Keep building pressure",
+            text="Pokračujte ve zvyšování tlaku",
             font=("Trebuchet MS", 28, "bold"),
             bg=BG_COLOR,
             fg="#2f78b2",
@@ -133,11 +139,19 @@ class SprinklerTutorialGame:
             r = 1 + (i % 2)
             color = ("#6a472a", "#8a6440", "#5e3f24")[i % 3]
             canvas.create_oval(px - r, py - r, px + r, py + r, fill=color, outline="")
+        crack_count = max(20, w // 25)
+        for i in range(crack_count):
+            x0 = (i * 29 + 7) % max(1, w)
+            y0 = dirt_top + ((i * 47 + 13) % max(1, dirt_h))
+            x1 = x0 + ((i * 17) % 52) - 26
+            y1 = y0 + 8 + ((i * 11) % 16)
+            canvas.create_line(x0, y0, x1, y1, fill="#654427", width=1)
 
         pipe_x = w * 0.5
         pipe_w = max(28, int(w * 0.08))
         pipe_top = dirt_top + 10
         pipe_bottom = int(h * 0.82)
+        riser_bottom = pipe_top
         riser_top = max(10, ground_y - 22)
         riser_w = pipe_w * 0.42
 
@@ -150,11 +164,27 @@ class SprinklerTutorialGame:
             outline="#59636a",
             width=3,
         )
+        canvas.create_line(
+            pipe_x - pipe_w * 0.18,
+            pipe_top + 6,
+            pipe_x - pipe_w * 0.18,
+            pipe_bottom - 6,
+            fill="#a7b0b6",
+            width=2,
+        )
+        canvas.create_line(
+            pipe_x + pipe_w * 0.18,
+            pipe_top + 6,
+            pipe_x + pipe_w * 0.18,
+            pipe_bottom - 6,
+            fill="#5c666e",
+            width=2,
+        )
         canvas.create_rectangle(
             pipe_x - riser_w / 2,
             riser_top,
             pipe_x + riser_w / 2,
-            pipe_top,
+            riser_bottom,
             fill="#7f8a92",
             outline="#59636a",
             width=2,
@@ -227,7 +257,7 @@ class SprinklerTutorialGame:
         canvas.create_text(
             w * 0.5,
             reservoir_top + (reservoir_bottom - reservoir_top) * 0.42,
-            text="UNDERGROUND RESERVOIR",
+            text="PODZEMNÍ NÁDRŽ",
             fill=WATER_LABEL_COLOR,
             font=(RIGHT_UI_FONT, 11, "bold"),
         )
@@ -235,13 +265,16 @@ class SprinklerTutorialGame:
         expected_idx = self.completed_valves
         for idx in range(VALVE_TOTAL):
             y = valve_ys[idx]
-            if idx < self.completed_valves:
+            is_completed = idx < self.completed_valves
+            is_active = idx == expected_idx and self.active_valve_index == idx
+            is_next = idx == expected_idx and self.active_valve_index is None
+            if is_completed:
                 line_color = "#5bc16d"
                 badge_fill = "#7ec850"
-            elif idx == expected_idx and self.active_valve_index == idx:
+            elif is_active:
                 line_color = "#f0c65a"
                 badge_fill = "#e5b048"
-            elif idx == expected_idx:
+            elif is_next:
                 line_color = "#d49a45"
                 badge_fill = "#d1883b"
             else:
@@ -254,7 +287,7 @@ class SprinklerTutorialGame:
                 pipe_x + guide_half_width,
                 y,
                 fill=line_color,
-                width=6 if idx == expected_idx else 4,
+                width=6 if (is_active or is_next) else 4,
             )
             badge_x = pipe_x - guide_half_width - 34
             canvas.create_oval(
@@ -292,14 +325,14 @@ class SprinklerTutorialGame:
         canvas.create_text(
             panel_center_x,
             panel_top + 18,
-            text="TURN VALVES 1 TO 4",
+            text="OTOČTE VENTILY 1 AŽ 4",
             fill="#f7f1e3",
             font=(RIGHT_UI_FONT_ACCENT, 13, "bold"),
         )
         canvas.create_text(
             panel_center_x,
             panel_top + 36,
-            text="Each valve raises the water one level.",
+            text="Každý ventil zvedne vodu o jednu úroveň.",
             fill="#f2dfc2",
             font=(RIGHT_UI_FONT, 10, "normal"),
         )
@@ -314,21 +347,24 @@ class SprinklerTutorialGame:
             vx = valve_center_x
             vy = valve_stack_bottom - idx * valve_spacing
             self.valve_centers.append((vx, vy))
-            if idx < self.completed_valves:
+            is_completed = idx < self.completed_valves
+            is_active = idx == expected_idx and self.active_valve_index == idx
+            is_next = idx == expected_idx and self.active_valve_index is None
+            if is_completed:
                 fill = "#7ec850"
-                label = "DONE"
+                label = "HOTOVO"
                 label_color = "#d9ffd1"
-            elif idx == expected_idx and self.active_valve_index == idx:
+            elif is_active:
                 fill = "#e5b048"
-                label = "HOLD"
+                label = "DRŽET"
                 label_color = "#fff0b8"
-            elif idx == expected_idx:
+            elif is_next:
                 fill = "#d1883b"
-                label = "NEXT"
+                label = "DALŠÍ"
                 label_color = "#ffe1b3"
             else:
                 fill = "#6c757c"
-                label = "LOCKED"
+                label = "ZAMČENO"
                 label_color = "#d5d9dc"
             if idx < VALVE_TOTAL - 1:
                 next_vy = valve_stack_bottom - (idx + 1) * valve_spacing
@@ -358,12 +394,22 @@ class SprinklerTutorialGame:
                 font=(RIGHT_UI_FONT, 12, "bold"),
                 tags=("valve", f"valve_{idx}"),
             )
-            angle = (time.monotonic() * 40.0) % 360.0 if self.active_valve_index == idx else 0.0
-            self._draw_valve_wheel(canvas, vx, vy, self.valve_radius + 7, angle, self.active_valve_index == idx, idx)
+            spin_angle = 0.0
+            if is_active:
+                spin_angle = (time.monotonic() * 40.0) % 360.0
+            self._draw_valve_wheel(
+                canvas,
+                vx,
+                vy,
+                self.valve_radius + 7,
+                spin_angle,
+                is_active,
+                idx,
+            )
             canvas.create_text(
                 vx + 34,
                 vy - 8,
-                text=f"VALVE {idx + 1}",
+                text=f"VENTIL {idx + 1}",
                 anchor="w",
                 fill="#f7f1e3",
                 font=(RIGHT_UI_FONT, 11, "bold"),
@@ -408,7 +454,7 @@ class SprinklerTutorialGame:
                 width=2,
             )
 
-        if self.sprinkler_on or self.sprinkler_animating:
+        if self.sprinkler_on:
             spray_color = "#7cc8f2"
             for side in (-1, 1):
                 sx = pipe_x + side * arm_len * 0.45
@@ -426,7 +472,7 @@ class SprinklerTutorialGame:
             canvas.create_text(
                 pipe_x,
                 head_y - 34,
-                text="SPRINKLER ONLINE",
+                text="POSTŘIKOVAČ AKTIVNÍ",
                 fill="#1e2a34",
                 font=(RIGHT_UI_FONT_ACCENT, 12, "bold"),
             )
@@ -450,18 +496,18 @@ class SprinklerTutorialGame:
             canvas.create_text(
                 pipe_x,
                 head_y - 34,
-                text="NO PRESSURE",
+                text="ŽÁDNÝ TLAK",
                 fill="#2c1a12",
                 font=(RIGHT_UI_FONT_ACCENT, 12, "bold"),
             )
 
-        if not self.sprinkler_on and not self.game_over:
+        if not self.sprinkler_on:
             current = min(self.completed_valves + 1, VALVE_TOTAL)
             if self.active_valve_index is not None:
                 remaining = max(0.0, (VALVE_HOLD_MS / 1000.0) - (time.monotonic() - self.active_valve_start))
-                info = f"Holding valve {current}: {remaining:0.1f}s left"
+                info = f"Držíte ventil {current}: zbývá {remaining:0.1f}s do úrovně {current}"
             else:
-                info = f"Turn valve {current} to raise the water to level {current}"
+                info = f"Otočte ventilem {current} a zvedněte vodu do úrovně {current}"
             canvas.create_text(
                 w * 0.5,
                 h - 26,
@@ -560,8 +606,8 @@ class SprinklerTutorialGame:
         if time.monotonic() >= self.sprinkler_anim_end_at:
             self.sprinkler_animating = False
             self._draw_scene()
-            self.end_title.config(text="SUCCESS")
-            self.end_label.config(text="Sprinkler pressure complete")
+            self.end_title.config(text="ÚSPĚCH")
+            self.end_label.config(text="Natlakování postřikovače dokončeno")
             self.show_end_overlay()
             return
         self._draw_scene()
@@ -575,8 +621,8 @@ class SprinklerTutorialGame:
             if self.time_left <= 0:
                 self.time_left = 0
                 self.timer_label.config(text=self._format_time(self.time_left))
-                self.end_title.config(text="TIME UP")
-                self.end_label.config(text="Keep building pressure")
+                self.end_title.config(text="ČAS VYPRŠEL")
+                self.end_label.config(text="Pokračujte ve zvyšování tlaku")
                 self.end_game()
                 return
             self.timer_label.config(text=self._format_time(self.time_left))

@@ -26,7 +26,7 @@ TIMER_SECONDS = 120
 class ExperimentGame:
     def __init__(self, root):
         self.root = root
-        self.root.title("Experiment - Fire & Irrigation")
+        self.root.title("Experiment - Oheň a zavlažování")
         self.root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
         self.root.configure(bg=RIGHT_BG)
 
@@ -81,7 +81,13 @@ class ExperimentGame:
             highlightthickness=0,
             cursor="none"
         )
-        self.left_canvas.grid(row=1, column=0, sticky="nsew")
+        self.left_canvas.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=RIGHT_PANEL_PADDING,
+            pady=RIGHT_PANEL_PADDING
+        )
         self.left_canvas.bind("<Configure>", self._draw_grass_background)
         self.left_canvas.bind("<Motion>", self.on_left_motion)
         self.left_canvas.bind("<Leave>", self.on_left_leave)
@@ -296,7 +302,7 @@ class ExperimentGame:
         canvas.create_text(
             w * 0.5,
             reservoir_top + (reservoir_bottom - reservoir_top) * 0.42,
-            text="UNDERGROUND RESERVOIR",
+            text="PODZEMNÍ NÁDRŽ",
             fill=WATER_LABEL_COLOR,
             font=(RIGHT_UI_FONT, 11, "bold")
         )
@@ -367,14 +373,14 @@ class ExperimentGame:
         canvas.create_text(
             panel_center_x,
             panel_top + 18,
-            text="TURN VALVES 1 TO 4",
+            text="OTOČTE VENTILY 1 AŽ 4",
             fill="#f7f1e3",
             font=(RIGHT_UI_FONT_ACCENT, 13, "bold")
         )
         canvas.create_text(
             panel_center_x,
             panel_top + 36,
-            text="Each valve raises the water one level.",
+            text="Každý ventil zvedne vodu o jednu úroveň.",
             fill="#f2dfc2",
             font=(RIGHT_UI_FONT, 10, "normal")
         )
@@ -391,19 +397,19 @@ class ExperimentGame:
             is_next = idx == expected_idx and self.active_valve_index is None
             if is_completed:
                 fill = "#7ec850"
-                label = "DONE"
+                label = "HOTOVO"
                 label_color = "#d9ffd1"
             elif is_active:
                 fill = "#e5b048"
-                label = "HOLD"
+                label = "DRŽET"
                 label_color = "#fff0b8"
             elif is_next:
                 fill = "#d1883b"
-                label = "NEXT"
+                label = "DALŠÍ"
                 label_color = "#ffe1b3"
             else:
                 fill = "#6c757c"
-                label = "LOCKED"
+                label = "ZAMČENO"
                 label_color = "#d5d9dc"
             if idx < self.valve_total - 1:
                 next_vy = valve_stack_bottom - (idx + 1) * valve_spacing
@@ -448,7 +454,7 @@ class ExperimentGame:
             canvas.create_text(
                 vx + 34,
                 vy - 8,
-                text=f"VALVE {idx + 1}",
+                text=f"VENTIL {idx + 1}",
                 anchor="w",
                 fill="#f7f1e3",
                 font=(RIGHT_UI_FONT, 11, "bold")
@@ -511,7 +517,7 @@ class ExperimentGame:
             canvas.create_text(
                 pipe_x,
                 head_y - 34,
-                text="SPRINKLER ONLINE",
+                text="POSTŘIKOVAČ AKTIVNÍ",
                 fill="#1e2a34",
                 font=(RIGHT_UI_FONT_ACCENT, 12, "bold")
             )
@@ -535,7 +541,7 @@ class ExperimentGame:
             canvas.create_text(
                 pipe_x,
                 head_y - 34,
-                text="NO PRESSURE",
+                text="ŽÁDNÝ TLAK",
                 fill="#2c1a12",
                 font=(RIGHT_UI_FONT_ACCENT, 12, "bold")
             )
@@ -546,7 +552,7 @@ class ExperimentGame:
             canvas.create_text(
                 (profile_left + profile_right) * 0.5,
                 ground_y - 30,
-                text="FIELD FIRES",
+                text="OHNĚ NA POLI",
                 fill="#5a2d16",
                 font=(RIGHT_UI_FONT, 10, "bold")
             )
@@ -572,9 +578,9 @@ class ExperimentGame:
             current = min(self.completed_valves + 1, self.valve_total)
             if self.active_valve_index is not None:
                 remaining = max(0.0, (self.valve_hold_ms / 1000.0) - (time.monotonic() - self.active_valve_start))
-                info = f"Holding valve {current}: {remaining:0.1f}s left to reach level {current}"
+                info = f"Držíte ventil {current}: zbývá {remaining:0.1f}s do úrovně {current}"
             else:
-                info = f"Turn valve {current} to raise the water to level {current}"
+                info = f"Otočte ventilem {current} a zvedněte vodu do úrovně {current}"
             canvas.create_text(
                 w * 0.5,
                 h - 26,
@@ -1312,7 +1318,7 @@ class ExperimentGame:
         self.left_canvas.create_text(
             (lake_x0 + lake_x1) * 0.5,
             (lake_y0 + lake_y1) * 0.5,
-            text="LAKE",
+            text="JEZERO",
             fill=WATER_LABEL_COLOR,
             font=("Georgia", 12, "bold"),
             tags="lake"
