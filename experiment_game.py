@@ -33,8 +33,8 @@ class ExperimentGame:
         self.container = tk.Frame(root, bg=RIGHT_BG)
         self.container.pack(fill="both", expand=True)
 
-        self.container.columnconfigure(0, weight=3)
-        self.container.columnconfigure(1, weight=2)
+        self.container.columnconfigure(0, weight=1, uniform="half")
+        self.container.columnconfigure(1, weight=1, uniform="half")
         self.container.rowconfigure(0, weight=0, minsize=70)
         self.container.rowconfigure(1, weight=1)
 
@@ -61,6 +61,24 @@ class ExperimentGame:
             fg="#2b2b2b"
         )
         self.timer_label.place(relx=0.98, rely=0.55, anchor="e")
+
+        self.start_overlay = tk.Frame(self.root, bg=RIGHT_BG)
+        self.start_title_label = tk.Label(
+            self.start_overlay,
+            text="Experiment pripraven",
+            font=("Georgia", 34, "bold"),
+            bg=RIGHT_BG,
+            fg="#2b2b2b"
+        )
+        self.start_title_label.place(relx=0.5, rely=0.44, anchor="center")
+        self.start_hint_label = tk.Label(
+            self.start_overlay,
+            text="Stisknete mezernik pro start",
+            font=("Georgia", 20),
+            bg=RIGHT_BG,
+            fg="#5a5a5a"
+        )
+        self.start_hint_label.place(relx=0.5, rely=0.54, anchor="center")
 
         # End overlay (big score)
         self.end_overlay = tk.Frame(self.root, bg=RIGHT_BG)
@@ -124,9 +142,11 @@ class ExperimentGame:
         self.sprinkler_next_extinguish_at = 0.0
         self.sprinkler_pending_fires = []
         self.finish_overlay_after_sprinkler = False
-        self.root.after(500, self.schedule_next_fire)
-        self.root.after(1000, self.on_fire_tick)
-        self.root.after(1000, self.on_timer_tick)
+        self.game_started = False
+        self.root.bind_all("<KeyPress-space>", self.on_space_press)
+        self.start_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.start_overlay.lift()
+        self.root.after(100, self.root.focus_force)
 
     def _build_right_scene(self):
         self.valve_total = 4
@@ -310,7 +330,8 @@ class ExperimentGame:
         # Four equal milestones in the pipe, with the control valves grouped
         # together so the player reads the task as "one valve = one level".
         self.valve_centers = []
-        self.valve_radius = max(16, int(min(w, h) * 0.03))
+        self.valve_radius = max(12, int(min(w, h) * 0.022))
+        level_badge_radius = max(13, int(min(w, h) * 0.018))
         expected_idx = self.completed_valves
         for idx in range(self.valve_total):
             y = valve_ys[idx]
@@ -338,12 +359,12 @@ class ExperimentGame:
                 fill=line_color,
                 width=6 if (is_active or is_next) else 4
             )
-            badge_x = pipe_x - guide_half_width - 34
+            badge_x = pipe_x - guide_half_width - level_badge_radius - 24
             canvas.create_oval(
-                badge_x - 11,
-                y - 11,
-                badge_x + 11,
-                y + 11,
+                badge_x - level_badge_radius,
+                y - level_badge_radius,
+                badge_x + level_badge_radius,
+                y + level_badge_radius,
                 fill=badge_fill,
                 outline="#2f3438",
                 width=2
@@ -353,7 +374,7 @@ class ExperimentGame:
                 y,
                 text=str(idx + 1),
                 fill="#20262b",
-                font=(RIGHT_UI_FONT, 10, "bold")
+                font=(RIGHT_UI_FONT, 12, "bold")
             )
 
         panel_left = int(max(pipe_x + pipe_w * 1.7, w * 0.56))
@@ -384,7 +405,7 @@ class ExperimentGame:
             fill="#f2dfc2",
             font=(RIGHT_UI_FONT, 10, "normal")
         )
-        valve_center_x = panel_left + 42
+        valve_center_x = panel_left + 36
         valve_stack_top = panel_top + 70
         valve_stack_bottom = panel_bottom - 24
         valve_spacing = (valve_stack_bottom - valve_stack_top) / max(1, self.valve_total - 1)
@@ -415,11 +436,11 @@ class ExperimentGame:
                 next_vy = valve_stack_bottom - (idx + 1) * valve_spacing
                 canvas.create_line(
                     vx,
-                    next_vy + self.valve_radius + 8,
+                    next_vy + self.valve_radius + 6,
                     vx,
-                    vy - self.valve_radius - 8,
+                    vy - self.valve_radius - 6,
                     fill="#6a472a",
-                    width=5
+                    width=4
                 )
             canvas.create_oval(
                 vx - self.valve_radius,
@@ -436,7 +457,7 @@ class ExperimentGame:
                 vy,
                 text=str(idx + 1),
                 fill="#20262b",
-                font=(RIGHT_UI_FONT, 12, "bold"),
+                font=(RIGHT_UI_FONT, 11, "bold"),
                 tags=("valve", f"valve_{idx}")
             )
             spin_angle = 0.0
@@ -446,13 +467,13 @@ class ExperimentGame:
                 canvas,
                 vx,
                 vy,
-                self.valve_radius + 7,
+                self.valve_radius + 5,
                 spin_angle,
                 is_active,
                 idx
             )
             canvas.create_text(
-                vx + 34,
+                vx + self.valve_radius + 16,
                 vy - 8,
                 text=f"VENTIL {idx + 1}",
                 anchor="w",
@@ -460,7 +481,7 @@ class ExperimentGame:
                 font=(RIGHT_UI_FONT, 11, "bold")
             )
             canvas.create_text(
-                vx + 34,
+                vx + self.valve_radius + 16,
                 vy + 10,
                 text=label,
                 anchor="w",
@@ -590,7 +611,7 @@ class ExperimentGame:
             )
 
     def on_right_press(self, event):
-        if self.game_over or self.sprinkler_on:
+        if not self.game_started or self.game_over or self.sprinkler_on:
             return
         valve_index = self._right_valve_index_at(event.x, event.y)
         if valve_index is None or valve_index != self.completed_valves:
@@ -754,7 +775,7 @@ class ExperimentGame:
         self.root.after(delay_ms, self.spawn_fire)
 
     def spawn_fire(self):
-        if self.fires_paused:
+        if not self.game_started or self.fires_paused:
             return
         self.left_canvas.update_idletasks()
         width = self.left_canvas.winfo_width()
@@ -799,7 +820,7 @@ class ExperimentGame:
             self._cancel_bucket_fill()
 
     def on_left_press(self, event):
-        if self.game_over:
+        if not self.game_started or self.game_over:
             return
         self.left_mouse_down = True
         self.pointer_x = event.x
@@ -1009,6 +1030,15 @@ class ExperimentGame:
         self.end_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.end_overlay.lift()
 
+    def on_space_press(self, event=None):
+        if self.game_started or self.game_over:
+            return
+        self.game_started = True
+        self.start_overlay.place_forget()
+        self.root.after(500, self.schedule_next_fire)
+        self.root.after(1000, self.on_fire_tick)
+        self.root.after(1000, self.on_timer_tick)
+
     def end_game(self):
         if self.game_over:
             return
@@ -1039,12 +1069,14 @@ class ExperimentGame:
             self.end_label.config(text=self._format_score())
 
     def on_fire_tick(self):
+        if not self.game_started or self.game_over:
+            return
         if not self.fires_paused and self.active_fires:
             self.update_score(-1 * len(self.active_fires))
         self.root.after(1000, self.on_fire_tick)
 
     def on_timer_tick(self):
-        if self.game_over:
+        if not self.game_started or self.game_over:
             return
         self.time_left -= 1
         if self.time_left <= 0:
@@ -1181,6 +1213,7 @@ class ExperimentGame:
         height = event.height
         self.left_canvas.delete("grass")
         self.left_canvas.delete("lake")
+        self.left_canvas.delete("left_sprinkler")
         self.left_canvas.create_rectangle(
             0,
             0,
