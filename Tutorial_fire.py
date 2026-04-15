@@ -13,8 +13,9 @@ from experiment_game import (
 
 class FireTutorialGame(ExperimentGame):
     def __init__(self, root):
+        self.tutorial_end_delay_ms = 1600
         self.root = root
-        self.root.title("Tutoriál - Oheň")
+        self.root.title("Tutorial - Ohně")
         self.root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
         self.root.configure(bg=RIGHT_BG)
 
@@ -50,6 +51,7 @@ class FireTutorialGame(ExperimentGame):
         self.sprinkler_next_extinguish_at = 0.0
         self.sprinkler_pending_fires = []
         self.finish_overlay_after_sprinkler = False
+        self.tutorial_end_after_id = None
 
         self.tutorial_stage = -1
         self.bucket_fill_practiced = False
@@ -89,7 +91,7 @@ class FireTutorialGame(ExperimentGame):
 
         self.title_label = tk.Label(
             self.info_panel,
-            text="TUTORIÁL OHNĚ",
+            text="Tutorial - Ohně",
             font=("Georgia", 28, "bold"),
             bg=RIGHT_BG,
             fg="#8b2f17",
@@ -137,17 +139,25 @@ class FireTutorialGame(ExperimentGame):
         self.end_title.place(relx=0.5, rely=0.40, anchor="center")
         self.end_label = tk.Label(
             self.end_overlay,
-            text="Teď už můžete hasit oheň v hlavní části experimentu.",
+            text="Tutoriál je hotový. Můžete pokračovat do hlavní části experimentu, nebo si ho projít ještě jednou.",
             font=("Trebuchet MS", 18, "bold"),
             bg=RIGHT_BG,
             fg="#c1121f",
         )
         self.end_label.place(relx=0.5, rely=0.54, anchor="center")
+        self.end_hint = tk.Label(
+            self.end_overlay,
+            text="Enter = zkusit tutorial znovu, mezerník = ukončit tutorial",
+            font=("Trebuchet MS", 16, "bold"),
+            bg=RIGHT_BG,
+            fg="#4f3c2f",
+        )
+        self.end_hint.place(relx=0.5, rely=0.66, anchor="center")
 
         self.start_overlay = tk.Frame(self.root, bg=RIGHT_BG)
         self.start_title_label = tk.Label(
             self.start_overlay,
-            text="TUTORIÁL OHNĚ",
+            text="Tutorial - Ohně",
             font=("Georgia", 34, "bold"),
             bg=RIGHT_BG,
             fg="#8b2f17",
@@ -155,7 +165,7 @@ class FireTutorialGame(ExperimentGame):
         self.start_title_label.place(relx=0.5, rely=0.42, anchor="center")
         self.start_hint_label = tk.Label(
             self.start_overlay,
-            text="Zmáčknutím mezerníku zahájíte tutorial",
+            text="Stiskněte mezerník a projděte si ovládání hašení ohně",
             font=("Trebuchet MS", 18, "bold"),
             bg=RIGHT_BG,
             fg="#4f3c2f",
@@ -165,32 +175,36 @@ class FireTutorialGame(ExperimentGame):
         self.start_overlay.lift()
 
         self.root.bind_all("<KeyPress-space>", self.on_space_press)
+        self.root.bind_all("<KeyPress-Return>", self.on_enter_press)
+        self.root.bind_all("<KeyPress-KP_Enter>", self.on_enter_press)
         self.root.after(100, self.root.focus_force)
         self._update_stage_text()
+        self.root.after(150, self._show_initial_bucket_cursor)
 
     def _update_stage_text(self):
         stage_texts = [
             (
                 "Před sebou vidíte louku, na které se budou objevovat ohně.\n"
-                "Ohně můžete hasit za pomoci jezera a kyblíku.",
-                "Zmáčkněte mezerník pro pokračování.",
+                "K jejich hašení budete používat jezero jako zdroj vody a kyblík jako nástroj pro přenášení vody.",
+                "Stiskněte mezerník a přejděte k nácviku plnění kyblíku.",
             ),
             (
-                "Kyblík můžete naplnit tak, že myší přejedete nad jezero, "
-                "zmáčknete a 2 vteřiny držíte. Pokud pustíte tlačítko, než se "
-                "kyblík celý naplní, tak musíte začít odznova.\n\n"
-                "Teď si to, prosím, vyzkoušejte.",
+                "Kyblík naplníte tak, že najedete kurzorem nad jezero, stisknete tlačítko myši "
+                "a podržíte ho přibližně 2 vteřiny. Pokud tlačítko pustíte příliš brzy, "
+                "plnění se přeruší a je potřeba začít znovu.\n\n"
+                "Teď si plnění kyblíku vyzkoušejte.",
                 (
-                    "Poté co jste si to vyzkoušeli, zmáčkněte mezerník pro pokračování."
+                    "Máte hotovo. Stiskněte mezerník a přejděte k hašení ohně."
                     if self.bucket_fill_practiced
-                    else "Nejprve si zkuste naplnit kyblík."
+                    else "Najeďte nad jezero, podržte tlačítko a naplňte kyblík."
                 ),
             ),
             (
-                "Když máte kyblík naplněný, tak jím můžete uhasit právě jeden oheň. "
-                "Potom je zapotřebí opět kyblík naplnit.\n\n"
-                "Nyní si to vyzkoušejte.",
-                "Naplňte kyblík a uhaste oheň uprostřed pole.",
+                "Plný kyblík stačí vždy jen na uhašení jednoho ohně. "
+                "Po každém uhašení je proto potřeba vrátit se k jezeru a znovu ho naplnit. "
+                "V tomto kroku na vás čekají dva ohně, takže celý postup provedete dvakrát.\n\n"
+                "Teď si zkuste celý postup v praxi.",
+                "Naplňte kyblík a uhaste oba ohně na louce.",
             ),
         ]
 
@@ -216,11 +230,15 @@ class FireTutorialGame(ExperimentGame):
                 )
 
     def on_space_press(self, event=None):
+        if self.game_over and self.end_overlay.winfo_ismapped():
+            self.root.destroy()
+            return
         if self.game_over:
             return
         if self.tutorial_stage == -1:
             self.tutorial_stage = 0
             self.start_overlay.place_forget()
+            self._show_initial_bucket_cursor()
             self._update_stage_text()
         elif self.tutorial_stage == 0:
             self.tutorial_stage = 1
@@ -234,8 +252,44 @@ class FireTutorialGame(ExperimentGame):
             self.bucket_fill_progress = 0.0
             self._cancel_bucket_fill()
             self.left_canvas.delete("bucket_cursor")
-            self._spawn_center_fire()
+            self._spawn_tutorial_fires()
             self._update_stage_text()
+
+    def on_enter_press(self, event=None):
+        if self.game_over and self.end_overlay.winfo_ismapped():
+            self.restart_tutorial()
+
+    def restart_tutorial(self):
+        if self.tutorial_end_after_id is not None:
+            self.root.after_cancel(self.tutorial_end_after_id)
+            self.tutorial_end_after_id = None
+        if self.bucket_fill_after_id is not None or self.bucket_fill_anim_after_id is not None:
+            self._cancel_bucket_fill()
+        if self.bucket_pour_after_id is not None:
+            self.root.after_cancel(self.bucket_pour_after_id)
+            self.bucket_pour_after_id = None
+        self.bucket_pour_state = None
+        self.game_over = False
+        self.fires_paused = False
+        self.bucket_is_full = False
+        self.bucket_fill_practiced = False
+        self.bucket_fill_progress = 0.0
+        self.left_mouse_down = False
+        self.pointer_x = 0
+        self.pointer_y = 0
+        self.tutorial_stage = -1
+        self.active_fires.clear()
+        self.fire_positions.clear()
+        self.end_overlay.place_forget()
+        self.left_canvas.delete("fire")
+        self.left_canvas.delete("bucket_cursor")
+        self.left_canvas.delete("bucket_pour")
+        self.left_canvas.delete("bucket_fill_ring")
+        self.left_canvas.delete("sprinkler_splash")
+        self.start_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.start_overlay.lift()
+        self._update_stage_text()
+        self.root.after(150, self._show_initial_bucket_cursor)
 
     def schedule_next_fire(self):
         return
@@ -246,13 +300,24 @@ class FireTutorialGame(ExperimentGame):
     def _draw_right_scene(self, event=None):
         return
 
+    def _show_initial_bucket_cursor(self):
+        self.left_canvas.update_idletasks()
+        width = self.left_canvas.winfo_width()
+        height = self.left_canvas.winfo_height()
+        if width <= 1 or height <= 1:
+            self.root.after(100, self._show_initial_bucket_cursor)
+            return
+        self.pointer_x = int(width * 0.5)
+        self.pointer_y = int(height * 0.55)
+        self._draw_bucket_cursor(self.pointer_x, self.pointer_y)
+
     def on_left_motion(self, event):
-        if self.tutorial_stage == 0 or self.game_over:
+        if self.game_over:
             return
         super().on_left_motion(event)
 
     def on_left_leave(self, event):
-        if self.tutorial_stage == 0 or self.game_over:
+        if self.game_over:
             self.left_canvas.delete("bucket_cursor")
             return
         super().on_left_leave(event)
@@ -273,31 +338,53 @@ class FireTutorialGame(ExperimentGame):
             self.bucket_fill_practiced = True
             self._update_stage_text()
 
-    def _spawn_center_fire(self):
+    def _spawn_tutorial_fires(self):
         self.left_canvas.update_idletasks()
         width = self.left_canvas.winfo_width()
         height = self.left_canvas.winfo_height()
         if width <= 1 or height <= 1:
-            self.root.after(100, self._spawn_center_fire)
+            self.root.after(100, self._spawn_tutorial_fires)
             return
         self.left_canvas.delete("fire")
         self.active_fires.clear()
         self.fire_positions.clear()
-        self.fire_counter += 1
-        tag = f"fire_{self.fire_counter}"
-        x = int(width * 0.5)
-        y = int(height * 0.46)
+        positions = (
+            (0.42, 0.42),
+            (0.62, 0.56),
+        )
         size = 26
-        self._draw_fire(x, y, size, tag)
-        self.active_fires.add(tag)
-        self.fire_positions[tag] = (x, y, size)
+        for rel_x, rel_y in positions:
+            self.fire_counter += 1
+            tag = f"fire_{self.fire_counter}"
+            x = int(width * rel_x)
+            y = int(height * rel_y)
+            self._draw_fire(x, y, size, tag)
+            self.active_fires.add(tag)
+            self.fire_positions[tag] = (x, y, size)
         self.left_canvas.tag_raise("fire")
         self.left_canvas.tag_raise("bucket_cursor")
 
     def remove_fire(self, tag):
         ExperimentGame.remove_fire(self, tag)
         if self.tutorial_stage == 2 and not self.active_fires:
-            self.end_game()
+            self._schedule_tutorial_complete()
+
+    def _schedule_tutorial_complete(self):
+        if self.tutorial_end_after_id is not None:
+            return
+        self.game_over = True
+        self.fires_paused = True
+        self.tutorial_end_after_id = self.root.after(
+            self.tutorial_end_delay_ms,
+            self._finish_tutorial_complete,
+        )
+
+    def _finish_tutorial_complete(self):
+        self.tutorial_end_after_id = None
+        if self.bucket_is_filling:
+            self._cancel_bucket_fill()
+        self.bucket_pour_state = None
+        self.show_end_overlay()
 
     def show_end_overlay(self):
         self.end_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)

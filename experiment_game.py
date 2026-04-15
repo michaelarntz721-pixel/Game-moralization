@@ -91,6 +91,14 @@ class ExperimentGame:
         )
         self.end_label.place(relx=0.5, rely=0.5, anchor="center")
         self.end_overlay.place_forget()
+        self.countdown_label = tk.Label(
+            self.root,
+            text="",
+            font=("Georgia", 140, "bold"),
+            bg=RIGHT_BG,
+            fg="#000000"
+        )
+        self.countdown_label.place_forget()
 
         # Left side: blank canvas
         self.left_canvas = tk.Canvas(
@@ -142,6 +150,9 @@ class ExperimentGame:
         self.sprinkler_next_extinguish_at = 0.0
         self.sprinkler_pending_fires = []
         self.finish_overlay_after_sprinkler = False
+        self.countdown_running = False
+        self.countdown_value = 0
+        self.countdown_after_id = None
         self.game_started = False
         self.root.bind_all("<KeyPress-space>", self.on_space_press)
         self.start_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
@@ -330,7 +341,6 @@ class ExperimentGame:
         # Four equal milestones in the pipe, with the control valves grouped
         # together so the player reads the task as "one valve = one level".
         self.valve_centers = []
-        self.valve_radius = max(12, int(min(w, h) * 0.022))
         level_badge_radius = max(13, int(min(w, h) * 0.018))
         expected_idx = self.completed_valves
         for idx in range(self.valve_total):
@@ -409,6 +419,9 @@ class ExperimentGame:
         valve_stack_top = panel_top + 70
         valve_stack_bottom = panel_bottom - 24
         valve_spacing = (valve_stack_bottom - valve_stack_top) / max(1, self.valve_total - 1)
+        base_valve_radius = max(9, int(min(w, h) * 0.016))
+        spacing_limited_radius = max(9, int(valve_spacing * 0.34))
+        self.valve_radius = min(base_valve_radius, spacing_limited_radius)
         for idx in range(self.valve_total):
             vx = valve_center_x
             vy = valve_stack_bottom - idx * valve_spacing
@@ -467,7 +480,7 @@ class ExperimentGame:
                 canvas,
                 vx,
                 vy,
-                self.valve_radius + 5,
+                self.valve_radius + 4,
                 spin_angle,
                 is_active,
                 idx
@@ -538,7 +551,7 @@ class ExperimentGame:
             canvas.create_text(
                 pipe_x,
                 head_y - 34,
-                text="POSTŘIKOVAČ AKTIVNÍ",
+                text="ZAVLAŽOVACÍ SYSTÉM AKTIVNÍ",
                 fill="#1e2a34",
                 font=(RIGHT_UI_FONT_ACCENT, 12, "bold")
             )
@@ -573,7 +586,6 @@ class ExperimentGame:
             canvas.create_text(
                 (profile_left + profile_right) * 0.5,
                 ground_y - 30,
-                text="OHNĚ NA POLI",
                 fill="#5a2d16",
                 font=(RIGHT_UI_FONT, 10, "bold")
             )
@@ -594,21 +606,7 @@ class ExperimentGame:
                     f"profile_{tag}"
                 )
 
-        # Hold guidance text.
-        if not self.sprinkler_on:
-            current = min(self.completed_valves + 1, self.valve_total)
-            if self.active_valve_index is not None:
-                remaining = max(0.0, (self.valve_hold_ms / 1000.0) - (time.monotonic() - self.active_valve_start))
-                info = f"Držíte ventil {current}: zbývá {remaining:0.1f}s do úrovně {current}"
-            else:
-                info = f"Otočte ventilem {current} a zvedněte vodu do úrovně {current}"
-            canvas.create_text(
-                w * 0.5,
-                h - 26,
-                text=info,
-                fill="#2b1d13",
-                font=(RIGHT_UI_FONT, 12, "bold")
-            )
+        self._refresh_countdown_overlay()
 
     def on_right_press(self, event):
         if not self.game_started or self.game_over or self.sprinkler_on:
@@ -788,13 +786,20 @@ class ExperimentGame:
             self.schedule_next_fire()
             return
 
-        x = random.randint(margin, width - margin)
-        y = random.randint(margin, height - margin)
-        for _ in range(20):
-            if not self._point_in_lake(x, y) and not self._point_in_left_sprinkler_zone(x, y):
+        x = None
+        y = None
+        for _ in range(60):
+            candidate_x = random.randint(margin, width - margin)
+            candidate_y = random.randint(margin, height - margin)
+            if self._can_place_fire(candidate_x, candidate_y, size):
+                x = candidate_x
+                y = candidate_y
                 break
+        if x is None or y is None:
             x = random.randint(margin, width - margin)
             y = random.randint(margin, height - margin)
+            self.schedule_next_fire()
+            return
 
         self.fire_counter += 1
         tag = f"fire_{self.fire_counter}"
@@ -893,7 +898,75 @@ class ExperimentGame:
             for tag in tags:
                 if tag.startswith("fire_"):
                     return tag
+        bucket_x0, bucket_y0, bucket_x1, bucket_y1 = self._bucket_cursor_bounds(x, y)
+        closest_tag = None
+        closest_distance_sq = None
+        for tag, (fx, fy, size) in self.fire_positions.items():
+            fire_bbox = self.left_canvas.bbox(tag)
+            if fire_bbox is not None:
+                fire_x0, fire_y0, fire_x1, fire_y1 = fire_bbox
+                fire_x0 -= 4
+                fire_y0 -= 4
+                fire_x1 += 4
+                fire_y1 += 4
+                if not (
+                    bucket_x1 < fire_x0
+                    or bucket_x0 > fire_x1
+                    or bucket_y1 < fire_y0
+                    or bucket_y0 > fire_y1
+                ):
+                    dx = x - fx
+                    dy = y - fy
+                    distance_sq = (dx * dx) + (dy * dy)
+                    if closest_distance_sq is None or distance_sq < closest_distance_sq:
+                        closest_tag = tag
+                        closest_distance_sq = distance_sq
+                    continue
+            radius = self._fire_hit_radius(size)
+            dx = x - fx
+            dy = y - fy
+            distance_sq = (dx * dx) + (dy * dy)
+            if distance_sq <= radius * radius:
+                if closest_distance_sq is None or distance_sq < closest_distance_sq:
+                    closest_tag = tag
+                    closest_distance_sq = distance_sq
+        if closest_tag is not None:
+            return closest_tag
         return None
+
+    def _bucket_cursor_bounds(self, x, y):
+        offset_x = 12
+        offset_y = 12
+        bx = x + offset_x
+        by = y + offset_y
+        return (
+            bx - 11,
+            by - 16,
+            bx + 11,
+            by + 16,
+        )
+
+    def _fire_hit_radius(self, size):
+        return max(30.0, size * 1.7)
+
+    def _fire_spacing_radius(self, size):
+        return max(30.0, size * 1.4)
+
+    def _can_place_fire(self, x, y, size):
+        if self._point_in_lake_buffered(x, y, self._fire_lake_buffer(size)) or self._point_in_left_sprinkler_zone(x, y):
+            return False
+        candidate_radius = self._fire_spacing_radius(size)
+        for fx, fy, existing_size in self.fire_positions.values():
+            existing_radius = self._fire_spacing_radius(existing_size)
+            dx = x - fx
+            dy = y - fy
+            min_distance = candidate_radius + existing_radius
+            if (dx * dx) + (dy * dy) < min_distance * min_distance:
+                return False
+        return True
+
+    def _fire_lake_buffer(self, size):
+        return max(24.0, size * 1.35)
 
     def _fire_center(self, tag):
         bbox = self.left_canvas.bbox(tag)
@@ -1017,6 +1090,20 @@ class ExperimentGame:
         dy = (y - cy) / ry
         return dx * dx + dy * dy <= 1.0
 
+    def _point_in_lake_buffered(self, x, y, padding):
+        x0, y0, x1, y1 = self.lake_bounds
+        if x1 <= x0 or y1 <= y0:
+            return False
+        cx = (x0 + x1) * 0.5
+        cy = (y0 + y1) * 0.5
+        rx = ((x1 - x0) * 0.5) + padding
+        ry = ((y1 - y0) * 0.5) + padding
+        if rx <= 0 or ry <= 0:
+            return False
+        dx = (x - cx) / rx
+        dy = (y - cy) / ry
+        return dx * dx + dy * dy <= 1.0
+
     def _point_in_left_sprinkler_zone(self, x, y):
         sx, sy = self.left_sprinkler_center
         if sx <= 0 and sy <= 0:
@@ -1031,18 +1118,53 @@ class ExperimentGame:
         self.end_overlay.lift()
 
     def on_space_press(self, event=None):
-        if self.game_started or self.game_over:
+        if self.game_started or self.game_over or self.countdown_running:
             return
-        self.game_started = True
         self.start_overlay.place_forget()
+        self._start_countdown()
+
+    def _start_countdown(self):
+        self.countdown_running = True
+        self._countdown_step(3)
+
+    def _countdown_step(self, value):
+        self.countdown_value = value
+        self._refresh_countdown_overlay()
+        if value <= 1:
+            self.countdown_after_id = self.root.after(1000, self._begin_gameplay)
+        else:
+            self.countdown_after_id = self.root.after(1000, lambda: self._countdown_step(value - 1))
+
+    def _begin_gameplay(self):
+        self.countdown_running = False
+        self.countdown_value = 0
+        self.countdown_after_id = None
+        self._refresh_countdown_overlay()
+        self.game_started = True
         self.root.after(500, self.schedule_next_fire)
         self.root.after(1000, self.on_fire_tick)
         self.root.after(1000, self.on_timer_tick)
+
+    def _refresh_countdown_overlay(self):
+        if not hasattr(self, "countdown_label"):
+            return
+        if not self.countdown_running or self.countdown_value <= 0:
+            self.countdown_label.place_forget()
+            return
+        self.countdown_label.config(text=str(self.countdown_value))
+        self.countdown_label.place(relx=0.5, rely=0.55, anchor="center")
+        self.countdown_label.lift()
 
     def end_game(self):
         if self.game_over:
             return
         self.game_over = True
+        if self.countdown_after_id is not None:
+            self.root.after_cancel(self.countdown_after_id)
+            self.countdown_after_id = None
+        self.countdown_running = False
+        self.countdown_value = 0
+        self._refresh_countdown_overlay()
         self.fires_paused = True
         if self.valve_hold_after_id is not None:
             self.root.after_cancel(self.valve_hold_after_id)
@@ -1407,6 +1529,7 @@ class ExperimentGame:
         self.left_canvas.tag_raise("left_sprinkler")
         self.left_canvas.tag_raise("fire")
         self._draw_bucket_cursor(self.pointer_x, self.pointer_y)
+        self._refresh_countdown_overlay()
 
     def _draw_bucket_cursor(self, x, y):
         if x <= 0 and y <= 0:

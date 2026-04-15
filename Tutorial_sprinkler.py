@@ -11,8 +11,9 @@ from experiment_game import (
 
 class SprinklerTutorialGame(ExperimentGame):
     def __init__(self, root):
+        self.tutorial_end_delay_ms = 3200
         self.root = root
-        self.root.title("Tutoriál - Postřikovač")
+        self.root.title("Tutorial - Zavlažovací systém")
         self.root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
         self.root.configure(bg=RIGHT_BG)
 
@@ -65,7 +66,7 @@ class SprinklerTutorialGame(ExperimentGame):
 
         self.title_label = tk.Label(
             self.info_panel,
-            text="TUTORIÁL POSTŘIKOVAČE",
+            text="Tutorial - Zavlažovací systém",
             font=("Georgia", 28, "bold"),
             bg=RIGHT_BG,
             fg="#37515e",
@@ -117,17 +118,25 @@ class SprinklerTutorialGame(ExperimentGame):
         self.end_title.place(relx=0.5, rely=0.40, anchor="center")
         self.end_label = tk.Label(
             self.end_overlay,
-            text="Teď už můžete spustit zavlažování v hlavní části experimentu.",
+            text="Tutoriál je hotový. Můžete pokračovat do hlavní části experimentu, nebo si ho projít ještě jednou.",
             font=("Trebuchet MS", 18, "bold"),
             bg=RIGHT_BG,
             fg="#2f78b2",
         )
         self.end_label.place(relx=0.5, rely=0.54, anchor="center")
+        self.end_hint = tk.Label(
+            self.end_overlay,
+            text="Enter = zkusit tutorial znovu, mezerník = ukončit tutorial",
+            font=("Trebuchet MS", 16, "bold"),
+            bg=RIGHT_BG,
+            fg="#4f3c2f",
+        )
+        self.end_hint.place(relx=0.5, rely=0.66, anchor="center")
 
         self.start_overlay = tk.Frame(self.root, bg=RIGHT_BG)
         self.start_title_label = tk.Label(
             self.start_overlay,
-            text="TUTORIÁL POSTŘIKOVAČE",
+            text="Tutorial - Zavlažovací systém",
             font=("Georgia", 34, "bold"),
             bg=RIGHT_BG,
             fg="#37515e",
@@ -135,7 +144,7 @@ class SprinklerTutorialGame(ExperimentGame):
         self.start_title_label.place(relx=0.5, rely=0.42, anchor="center")
         self.start_hint_label = tk.Label(
             self.start_overlay,
-            text="Zmáčknutím mezerníku zahájíte tutorial",
+            text="Stiskněte mezerník a projděte si ovládání zavlažovacího systému",
             font=("Trebuchet MS", 18, "bold"),
             bg=RIGHT_BG,
             fg="#4f3c2f",
@@ -145,6 +154,8 @@ class SprinklerTutorialGame(ExperimentGame):
         self.start_overlay.lift()
 
         self.root.bind_all("<KeyPress-space>", self.on_space_press)
+        self.root.bind_all("<KeyPress-Return>", self.on_enter_press)
+        self.root.bind_all("<KeyPress-KP_Enter>", self.on_enter_press)
         self.root.after(100, self.root.focus_force)
         self._update_stage_text()
         self._draw_right_scene()
@@ -152,23 +163,25 @@ class SprinklerTutorialGame(ExperimentGame):
     def _update_stage_text(self):
         stage_texts = [
             (
-                "Před sebou vidíte nefunkční zavlažovací systém, kterému chybí tlak. "
-                "Způsob, jak systém spravit, je přes ventily.",
-                "Zmáčkněte mezerník pro pokračování.",
+                "Na pravé straně vidíte zavlažovací systém, ve kterém zatím není dostatečný tlak. "
+                "Vaším úkolem bude postupně aktivovat ventily, zvednout hladinu vody v potrubí "
+                "a tím spustit zavlažovací systém.",
+                "Stiskněte mezerník a přejděte k praktické ukázce.",
             ),
             (
-                "Ventily aktivujete tak, že na ně najedete myší a držíte 10 vteřin. "
-                "Pokud pustíte tlačítko dřív, tak se Vám segment zavlažování resetuje. "
-                "Musíte ventily aktivovat postupně podle jejich čísel.",
+                "Ventil aktivujete tak, že na něj najedete myší a podržíte tlačítko 10 vteřin. "
+                "Když tlačítko pustíte dříve, průběh daného kroku se vynuluje a musíte začít znovu. "
+                "Ventily je potřeba aktivovat postupně podle čísel od 1 do 4.",
                 (
-                    "První segment je hotový. Zmáčknutím mezerníku pokračujte."
+                    "První úroveň je hotová. Stiskněte mezerník a přejděte k závěrečnému kroku."
                     if self.first_segment_done
-                    else "Aktivujte ventil 1 a naplňte první segment."
+                    else "Začněte ventilem 1 a zvedněte vodu do první úrovně."
                 ),
             ),
             (
-                "Když aktivujete všechny ventily, tak se spustí zavlažovací systém.",
-                "Dokončete poslední segment aktivací ventilu 4.",
+                "Každý správně aktivovaný ventil zvýší hladinu vody o jednu úroveň. "
+                "Jakmile dokončíte i poslední ventil, systém získá plný tlak a zavlažovací systém se automaticky spustí.",
+                "Dokončete aktivaci ventilu 4 a sledujte spuštění zavlažování.",
             ),
         ]
 
@@ -194,6 +207,9 @@ class SprinklerTutorialGame(ExperimentGame):
                 )
 
     def on_space_press(self, event=None):
+        if self.game_over and self.end_overlay.winfo_ismapped():
+            self.root.destroy()
+            return
         if self.game_over and self.sprinkler_on:
             return
         if self.tutorial_stage == -1:
@@ -221,6 +237,30 @@ class SprinklerTutorialGame(ExperimentGame):
             self.game_over = False
             self._update_stage_text()
             self._draw_right_scene()
+
+    def on_enter_press(self, event=None):
+        if self.game_over and self.end_overlay.winfo_ismapped():
+            self.restart_tutorial()
+
+    def restart_tutorial(self):
+        if self.valve_hold_after_id is not None:
+            self.root.after_cancel(self.valve_hold_after_id)
+            self.valve_hold_after_id = None
+        self.game_over = False
+        self.fires_paused = False
+        self.sprinkler_on = False
+        self.completed_valves = 0
+        self.active_valve_index = None
+        self.active_valve_progress = 0.0
+        self.active_valve_start = 0.0
+        self.tutorial_stage = -1
+        self.first_segment_done = False
+        self.stage_two_ready = False
+        self.end_overlay.place_forget()
+        self.start_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.start_overlay.lift()
+        self._update_stage_text()
+        self._draw_right_scene()
 
     def on_right_press(self, event):
         if self.tutorial_stage not in (1, 2):
@@ -307,27 +347,56 @@ class SprinklerTutorialGame(ExperimentGame):
             return
         canvas = self.right_canvas
         vx, vy = self.valve_centers[valve_index]
-        start_x = vx - 90
-        start_y = vy - 34
+        start_x = vx - 118
+        start_y = vy - 50
         end_x = vx - self.valve_radius - 6
         end_y = vy
+        label_x = start_x - 2
+        label_y = start_y - 22
+        label_pad_x = 16
+        label_pad_y = 8
+        canvas.create_line(
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            fill="#fff4d6",
+            width=11,
+            arrow="last",
+            arrowshape=(22, 24, 10),
+            capstyle="round",
+            joinstyle="round",
+            tags="tutorial_arrow",
+        )
         canvas.create_line(
             start_x,
             start_y,
             end_x,
             end_y,
             fill="#d62828",
-            width=6,
+            width=7,
             arrow="last",
-            arrowshape=(16, 18, 7),
+            arrowshape=(20, 22, 9),
+            capstyle="round",
+            joinstyle="round",
+            tags="tutorial_arrow",
+        )
+        canvas.create_rectangle(
+            label_x - label_pad_x,
+            label_y - label_pad_y,
+            label_x + 34,
+            label_y + 14,
+            fill="#fff4d6",
+            outline="#d62828",
+            width=3,
             tags="tutorial_arrow",
         )
         canvas.create_text(
-            start_x - 6,
-            start_y - 18,
-            text="TENTO VENTIL",
+            label_x,
+            label_y + 2,
+            text="ZDE",
             fill="#d62828",
-            font=("Trebuchet MS", 12, "bold"),
+            font=("Trebuchet MS", 13, "bold"),
             anchor="w",
             tags="tutorial_arrow",
         )
@@ -343,7 +412,7 @@ class SprinklerTutorialGame(ExperimentGame):
         self.active_valve_index = None
         self.active_valve_progress = 0.0
         self._draw_right_scene()
-        self.root.after(1200, self.show_end_overlay)
+        self.root.after(self.tutorial_end_delay_ms, self.show_end_overlay)
 
     def show_end_overlay(self):
         self.end_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
