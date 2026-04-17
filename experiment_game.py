@@ -89,7 +89,17 @@ class ExperimentGame:
             bg=RIGHT_BG,
             fg="#c1121f"
         )
-        self.end_label.place(relx=0.5, rely=0.5, anchor="center")
+        self.end_label.place(relx=0.5, rely=0.44, anchor="center")
+        self.end_message_label = tk.Label(
+            self.end_overlay,
+            text="",
+            font=("Georgia", 22, "bold"),
+            bg=RIGHT_BG,
+            fg="#4f3c2f",
+            wraplength=900,
+            justify="center"
+        )
+        self.end_message_label.place(relx=0.5, rely=0.66, anchor="center")
         self.end_overlay.place_forget()
         self.countdown_label = tk.Label(
             self.root,
@@ -309,10 +319,10 @@ class ExperimentGame:
                 )
 
         # Reservoir at the bottom (underground water body).
-        reservoir_top = int(h * 0.8)
+        reservoir_top = pipe_bottom
         reservoir_bottom = h + int(h * 0.12)
-        reservoir_left = int(w * 0.2)
-        reservoir_right = int(w * 0.8)
+        reservoir_left = int(w * 0.24)
+        reservoir_right = int(w * 0.76)
         canvas.create_oval(
             reservoir_left,
             reservoir_top,
@@ -1114,6 +1124,12 @@ class ExperimentGame:
 
     def show_end_overlay(self):
         self.end_label.config(text=self._format_score())
+        if self.score <= 0:
+            self.end_message_label.config(
+                text="V tomto kole se Vám nepodařilo uchránit žádné peníze."
+            )
+        else:
+            self.end_message_label.config(text="")
         self.end_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.end_overlay.lift()
 
@@ -1185,10 +1201,18 @@ class ExperimentGame:
         self.show_end_overlay()
 
     def update_score(self, delta):
-        self.score += delta
+        self.score = max(0, self.score + delta)
         self.score_label.config(text=self._format_score())
         if self.end_overlay.winfo_ismapped():
             self.end_label.config(text=self._format_score())
+            if self.score <= 0:
+                self.end_message_label.config(
+                    text="V tomto kole se Vám nepodařilo uchránit žádné peníze."
+                )
+            else:
+                self.end_message_label.config(text="")
+        if self.score <= 0 and not self.game_over:
+            self.end_game()
 
     def on_fire_tick(self):
         if not self.game_started or self.game_over:
