@@ -45,6 +45,12 @@ class SprinklerTutorialGame(ExperimentGame):
         self.sprinkler_next_extinguish_at = 0.0
         self.sprinkler_pending_fires = []
         self.finish_overlay_after_sprinkler = False
+        self.countdown_overlay = None
+        self.countdown_overlay_label = None
+        self.countdown_overlay_bg = "#ff00ff"
+        self.countdown_running = False
+        self.countdown_value = 0
+        self.countdown_after_id = None
 
         self.tutorial_stage = -1
         self.first_segment_done = False
@@ -105,6 +111,7 @@ class SprinklerTutorialGame(ExperimentGame):
         self.right_frame = tk.Frame(self.container, bg=RIGHT_BG)
         self.right_frame.grid(row=0, column=1, sticky="nsew")
         self._build_right_scene()
+        self.valve_hold_ms = 15000
 
         self.end_overlay = tk.Frame(self.root, bg=RIGHT_BG)
         self.end_overlay.place_forget()
@@ -308,6 +315,17 @@ class SprinklerTutorialGame(ExperimentGame):
             return
         self._draw_right_scene()
         self.valve_hold_after_id = self.root.after(60, self._tick_valve_hold)
+
+    def _cancel_valve_hold(self):
+        if self.active_valve_index is None:
+            return
+        self.active_valve_index = None
+        self.active_valve_progress = 0.0
+        self.active_valve_start = 0.0
+        if self.valve_hold_after_id is not None:
+            self.root.after_cancel(self.valve_hold_after_id)
+            self.valve_hold_after_id = None
+        self._draw_right_scene()
 
     def _draw_right_scene(self, event=None):
         ExperimentGame._draw_right_scene(self, event)
