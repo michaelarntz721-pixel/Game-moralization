@@ -242,15 +242,17 @@ class FireTutorialGame(ExperimentGame):
             self._update_stage_text()
         elif self.tutorial_stage == 0:
             self.tutorial_stage = 1
+            self._cancel_bucket_fill()
             self.bucket_is_full = False
+            self.bucket_fill_progress = 0.0
             self.bucket_fill_practiced = False
             self.left_canvas.delete("bucket_cursor")
             self._update_stage_text()
         elif self.tutorial_stage == 1 and self.bucket_fill_practiced:
             self.tutorial_stage = 2
+            self._cancel_bucket_fill()
             self.bucket_is_full = False
             self.bucket_fill_progress = 0.0
-            self._cancel_bucket_fill()
             self.left_canvas.delete("bucket_cursor")
             self._spawn_tutorial_fires()
             self._update_stage_text()

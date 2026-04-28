@@ -890,9 +890,11 @@ class ExperimentGame:
         self._tick_bucket_fill_animation()
 
     def _cancel_bucket_fill(self):
+        was_filling = self.bucket_is_filling
         self.bucket_is_filling = False
-        elapsed = time.monotonic() - self.bucket_fill_started_at
-        self.bucket_fill_progress = max(0.0, min(1.0, elapsed / 2.0))
+        if was_filling:
+            elapsed = time.monotonic() - self.bucket_fill_started_at
+            self.bucket_fill_progress = max(0.0, min(1.0, elapsed / 2.0))
         if self.bucket_fill_after_id is not None:
             self.root.after_cancel(self.bucket_fill_after_id)
             self.bucket_fill_after_id = None
