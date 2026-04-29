@@ -51,6 +51,12 @@ class FireTutorialGame(ExperimentGame):
         self.sprinkler_next_extinguish_at = 0.0
         self.sprinkler_pending_fires = []
         self.finish_overlay_after_sprinkler = False
+        self.countdown_running = False
+        self.countdown_value = 0
+        self.countdown_after_id = None
+        self.countdown_overlay = None
+        self.countdown_overlay_label = None
+        self.countdown_overlay_bg = "#ff00ff"
         self.tutorial_end_after_id = None
 
         self.tutorial_stage = -1
@@ -84,8 +90,8 @@ class FireTutorialGame(ExperimentGame):
         self.info_panel = tk.Frame(
             self.container,
             bg=RIGHT_BG,
-            padx=28,
-            pady=28,
+            padx=30,
+            pady=30,
         )
         self.info_panel.grid(row=0, column=1, sticky="nsew")
 
@@ -96,13 +102,13 @@ class FireTutorialGame(ExperimentGame):
             bg=RIGHT_BG,
             fg="#8b2f17",
         )
-        self.title_label.pack(anchor="center", pady=(26, 22))
+        self.title_label.pack(anchor="center", pady=(20, 20))
 
-        self.instructions_wraplength = 420
+        self.instructions_wraplength = 520
         self.stage_blocks = []
         for _ in range(3):
             block = tk.Frame(self.info_panel, bg=RIGHT_BG)
-            block.pack(anchor="n", fill="x", pady=(0, 22))
+            block.pack(anchor="n", fill="x", pady=(0, 18))
 
             body_label = tk.Label(
                 block,
@@ -143,6 +149,8 @@ class FireTutorialGame(ExperimentGame):
             font=("Trebuchet MS", 18, "bold"),
             bg=RIGHT_BG,
             fg="#c1121f",
+            justify="center",
+            wraplength=1040,
         )
         self.end_label.place(relx=0.5, rely=0.54, anchor="center")
         self.end_hint = tk.Label(
@@ -151,6 +159,8 @@ class FireTutorialGame(ExperimentGame):
             font=("Trebuchet MS", 16, "bold"),
             bg=RIGHT_BG,
             fg="#4f3c2f",
+            justify="center",
+            wraplength=1040,
         )
         self.end_hint.place(relx=0.5, rely=0.66, anchor="center")
 
@@ -169,6 +179,8 @@ class FireTutorialGame(ExperimentGame):
             font=("Trebuchet MS", 18, "bold"),
             bg=RIGHT_BG,
             fg="#4f3c2f",
+            justify="center",
+            wraplength=1040,
         )
         self.start_hint_label.place(relx=0.5, rely=0.54, anchor="center")
         self.start_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
@@ -177,9 +189,20 @@ class FireTutorialGame(ExperimentGame):
         self.root.bind_all("<KeyPress-space>", self.on_space_press)
         self.root.bind_all("<KeyPress-Return>", self.on_enter_press)
         self.root.bind_all("<KeyPress-KP_Enter>", self.on_enter_press)
+        self.info_panel.bind("<Configure>", self._resize_instruction_wraps)
         self.root.after(100, self.root.focus_force)
         self._update_stage_text()
         self.root.after(150, self._show_initial_bucket_cursor)
+
+    def _resize_instruction_wraps(self, event=None):
+        panel_width = event.width if event is not None else self.info_panel.winfo_width()
+        wraplength = max(420, min(540, panel_width - 90))
+        if wraplength == self.instructions_wraplength:
+            return
+        self.instructions_wraplength = wraplength
+        for body_label, hint_label in self.stage_blocks:
+            body_label.config(wraplength=wraplength)
+            hint_label.config(wraplength=wraplength)
 
     def _update_stage_text(self):
         stage_texts = [
@@ -190,8 +213,8 @@ class FireTutorialGame(ExperimentGame):
             ),
             (
                 "Kyblík naplníte tak, že najedete kurzorem nad jezero, stisknete tlačítko myši "
-                "a podržíte ho přibližně 2 vteřiny. Pokud tlačítko pustíte příliš brzy, "
-                "plnění se přeruší a je potřeba začít znovu.\n\n"
+                "a podržíte ho přibližně 2 vteřiny. Pokud tlačítko pustíte dříve, "
+                "plnění se jen zastaví a po dalším stisku pokračuje od stejné úrovně.\n\n"
                 "Teď si plnění kyblíku vyzkoušejte.",
                 (
                     "Máte hotovo. Stiskněte mezerník a přejděte k hašení ohně."
@@ -242,15 +265,17 @@ class FireTutorialGame(ExperimentGame):
             self._update_stage_text()
         elif self.tutorial_stage == 0:
             self.tutorial_stage = 1
+            self._cancel_bucket_fill()
             self.bucket_is_full = False
+            self.bucket_fill_progress = 0.0
             self.bucket_fill_practiced = False
             self.left_canvas.delete("bucket_cursor")
             self._update_stage_text()
         elif self.tutorial_stage == 1 and self.bucket_fill_practiced:
             self.tutorial_stage = 2
+            self._cancel_bucket_fill()
             self.bucket_is_full = False
             self.bucket_fill_progress = 0.0
-            self._cancel_bucket_fill()
             self.left_canvas.delete("bucket_cursor")
             self._spawn_tutorial_fires()
             self._update_stage_text()

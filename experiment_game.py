@@ -6,8 +6,8 @@ import tkinter as tk
 # ----------------------
 # Configuration
 # ----------------------
-WINDOW_WIDTH = 1200
-WINDOW_HEIGHT = 700
+WINDOW_WIDTH = 1280
+WINDOW_HEIGHT = 1024
 LEFT_BG = "#7bc96f"
 RIGHT_BG = "#f7f4ec"
 
@@ -16,11 +16,11 @@ WATER_LABEL_COLOR = "#d7ebfb"
 RIGHT_UI_FONT = "Trebuchet MS"
 RIGHT_UI_FONT_ACCENT = "Palatino Linotype"
 
-FIRE_INTERVAL_MIN_MS = 2500
-FIRE_INTERVAL_MAX_MS = 4500
+FIRE_INTERVAL_MS = 3000
 FIRE_SIZE = 26  # diameter-ish
-SCORE_START = 1000
-FIRE_SPAWN_SCORE_PENALTY = 10
+SCORE_START = 10000  # halers = 100,00 Kc
+FIRE_SPAWN_SCORE_PENALTY = 85  # 0,85 Kc per new fire
+FIRE_BURN_SCORE_PENALTY_PER_SECOND = 4  # 0,04 Kc per second per active fire
 TIMER_SECONDS = 120
 
 class ExperimentGame:
@@ -38,7 +38,7 @@ class ExperimentGame:
         self.container.rowconfigure(0, weight=0, minsize=70)
         self.container.rowconfigure(1, weight=1)
 
-        # Header: score centered across both sides
+        # Header: remaining money centered across both sides
         self.score = SCORE_START
         self.header = tk.Frame(self.container, bg=RIGHT_BG, height=70)
         self.header.grid(row=0, column=0, columnspan=2, sticky="ew")
@@ -65,7 +65,7 @@ class ExperimentGame:
         self.start_overlay = tk.Frame(self.root, bg=RIGHT_BG)
         self.start_title_label = tk.Label(
             self.start_overlay,
-            text="Experiment pripraven",
+            text="Experiment připraven",
             font=("Georgia", 34, "bold"),
             bg=RIGHT_BG,
             fg="#2b2b2b"
@@ -73,14 +73,16 @@ class ExperimentGame:
         self.start_title_label.place(relx=0.5, rely=0.44, anchor="center")
         self.start_hint_label = tk.Label(
             self.start_overlay,
-            text="Stisknete mezernik pro start",
+            text="Stiskněte mezerník pro start",
             font=("Georgia", 20),
             bg=RIGHT_BG,
-            fg="#5a5a5a"
+            fg="#5a5a5a",
+            justify="center",
+            wraplength=1040,
         )
         self.start_hint_label.place(relx=0.5, rely=0.54, anchor="center")
 
-        # End overlay (big score)
+        # End overlay (big remaining money)
         self.end_overlay = tk.Frame(self.root, bg=RIGHT_BG)
         self.end_label = tk.Label(
             self.end_overlay,
@@ -96,7 +98,7 @@ class ExperimentGame:
             font=("Georgia", 22, "bold"),
             bg=RIGHT_BG,
             fg="#4f3c2f",
-            wraplength=900,
+            wraplength=1040,
             justify="center"
         )
         self.end_message_label.place(relx=0.5, rely=0.66, anchor="center")
@@ -104,11 +106,14 @@ class ExperimentGame:
         self.countdown_label = tk.Label(
             self.root,
             text="",
-            font=("Georgia", 140, "bold"),
+            font=("Georgia", 180, "bold"),
             bg=RIGHT_BG,
             fg="#000000"
         )
         self.countdown_label.place_forget()
+        self.countdown_overlay = None
+        self.countdown_overlay_label = None
+        self.countdown_overlay_bg = "#ff00ff"
 
         # Left side: blank canvas
         self.left_canvas = tk.Canvas(
@@ -165,6 +170,7 @@ class ExperimentGame:
         self.countdown_after_id = None
         self.game_started = False
         self.root.bind_all("<KeyPress-space>", self.on_space_press)
+        self.root.bind("<Configure>", self._on_root_configure)
         self.start_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.start_overlay.lift()
         self.root.after(100, self.root.focus_force)
@@ -176,7 +182,7 @@ class ExperimentGame:
         self.active_valve_start = 0.0
         self.active_valve_progress = 0.0
         self.valve_hold_after_id = None
-        self.valve_hold_ms = 10000
+        self.valve_hold_ms = 15000
         self.valve_centers = []
         self.valve_radius = 0
         self.sprinkler_on = False
@@ -294,7 +300,7 @@ class ExperimentGame:
             stage_index = min(self.completed_valves, self.valve_total - 1)
             start_top = water_stages[stage_index]
             end_top = water_stages[stage_index + 1]
-            progress = self.active_valve_progress if self.active_valve_index is not None else 0.0
+            progress = self.active_valve_progress
             water_top = start_top + ((end_top - start_top) * progress)
         if water_top < pipe_bottom:
             main_top = max(water_top, pipe_top)
@@ -353,17 +359,22 @@ class ExperimentGame:
         self.valve_centers = []
         level_badge_radius = max(13, int(min(w, h) * 0.018))
         expected_idx = self.completed_valves
+        has_partial_valve_progress = self.active_valve_progress > 0.0 and self.active_valve_index is None
         for idx in range(self.valve_total):
             y = valve_ys[idx]
             is_completed = idx < self.completed_valves
             is_active = idx == expected_idx and self.active_valve_index == idx
-            is_next = idx == expected_idx and self.active_valve_index is None
+            is_partial = idx == expected_idx and has_partial_valve_progress
+            is_next = idx == expected_idx and self.active_valve_index is None and not has_partial_valve_progress
             if is_completed:
                 line_color = "#5bc16d"
                 badge_fill = "#7ec850"
             elif is_active:
                 line_color = "#f0c65a"
                 badge_fill = "#e5b048"
+            elif is_partial:
+                line_color = "#e4b261"
+                badge_fill = "#d89d52"
             elif is_next:
                 line_color = "#d49a45"
                 badge_fill = "#d1883b"
@@ -377,7 +388,7 @@ class ExperimentGame:
                 pipe_x + guide_half_width,
                 y,
                 fill=line_color,
-                width=6 if (is_active or is_next) else 4
+                width=6 if (is_active or is_partial or is_next) else 4
             )
             badge_x = pipe_x - guide_half_width - level_badge_radius - 24
             canvas.create_oval(
@@ -402,6 +413,7 @@ class ExperimentGame:
         panel_bottom = int(min(h - 18, reservoir_top - 10))
         panel_top = max(dirt_top + 24, panel_bottom - 230)
         panel_center_x = (panel_left + panel_right) * 0.5
+        panel_text_width = max(120, panel_right - panel_left - 24)
         canvas.create_rectangle(
             panel_left,
             panel_top,
@@ -416,17 +428,19 @@ class ExperimentGame:
             panel_top + 18,
             text="OTOČTE VENTILY 1 AŽ 4",
             fill="#f7f1e3",
-            font=(RIGHT_UI_FONT_ACCENT, 13, "bold")
+            font=(RIGHT_UI_FONT, 11, "bold"),
         )
         canvas.create_text(
             panel_center_x,
-            panel_top + 36,
+            panel_top + 48,
             text="Každý ventil zvedne vodu o jednu úroveň.",
             fill="#f2dfc2",
-            font=(RIGHT_UI_FONT, 10, "normal")
+            font=(RIGHT_UI_FONT, 9, "normal"),
+            justify="center",
+            width=panel_text_width,
         )
         valve_center_x = panel_left + 36
-        valve_stack_top = panel_top + 70
+        valve_stack_top = panel_top + 92
         valve_stack_bottom = panel_bottom - 24
         valve_spacing = (valve_stack_bottom - valve_stack_top) / max(1, self.valve_total - 1)
         base_valve_radius = max(9, int(min(w, h) * 0.016))
@@ -438,7 +452,8 @@ class ExperimentGame:
             self.valve_centers.append((vx, vy))
             is_completed = idx < self.completed_valves
             is_active = idx == expected_idx and self.active_valve_index == idx
-            is_next = idx == expected_idx and self.active_valve_index is None
+            is_partial = idx == expected_idx and has_partial_valve_progress
+            is_next = idx == expected_idx and self.active_valve_index is None and not has_partial_valve_progress
             if is_completed:
                 fill = "#7ec850"
                 label = "HOTOVO"
@@ -447,6 +462,10 @@ class ExperimentGame:
                 fill = "#e5b048"
                 label = "DRŽET"
                 label_color = "#fff0b8"
+            elif is_partial:
+                fill = "#d89d52"
+                label = "POKRAČOVAT"
+                label_color = "#ffe3bb"
             elif is_next:
                 fill = "#d1883b"
                 label = "DALŠÍ"
@@ -492,7 +511,7 @@ class ExperimentGame:
                 vy,
                 self.valve_radius + 4,
                 spin_angle,
-                is_active,
+                is_active or is_partial,
                 idx
             )
             canvas.create_text(
@@ -625,8 +644,9 @@ class ExperimentGame:
         if valve_index is None or valve_index != self.completed_valves:
             return
         self.active_valve_index = valve_index
-        self.active_valve_start = time.monotonic()
-        self.active_valve_progress = 0.0
+        self.active_valve_start = time.monotonic() - (
+            self.active_valve_progress * (self.valve_hold_ms / 1000.0)
+        )
         if self.valve_hold_after_id is not None:
             self.root.after_cancel(self.valve_hold_after_id)
             self.valve_hold_after_id = None
@@ -660,8 +680,9 @@ class ExperimentGame:
     def _cancel_valve_hold(self):
         if self.active_valve_index is None:
             return
+        elapsed = time.monotonic() - self.active_valve_start
+        self.active_valve_progress = max(0.0, min(1.0, elapsed / (self.valve_hold_ms / 1000.0)))
         self.active_valve_index = None
-        self.active_valve_progress = 0.0
         if self.valve_hold_after_id is not None:
             self.root.after_cancel(self.valve_hold_after_id)
             self.valve_hold_after_id = None
@@ -779,8 +800,7 @@ class ExperimentGame:
     def schedule_next_fire(self):
         if self.fires_paused:
             return
-        delay_ms = int(random.uniform(FIRE_INTERVAL_MIN_MS, FIRE_INTERVAL_MAX_MS))
-        self.root.after(delay_ms, self.spawn_fire)
+        self.root.after(FIRE_INTERVAL_MS, self.spawn_fire)
 
     def spawn_fire(self):
         if not self.game_started or self.fires_paused:
@@ -828,6 +848,7 @@ class ExperimentGame:
         self._draw_bucket_cursor(event.x, event.y)
         if self.bucket_is_filling and not self._point_in_lake(event.x, event.y):
             self._cancel_bucket_fill()
+            self._draw_bucket_cursor(event.x, event.y)
 
     def on_left_leave(self, event):
         self.left_canvas.delete("bucket_cursor")
@@ -861,25 +882,30 @@ class ExperimentGame:
         self.left_mouse_down = False
         if self.bucket_is_filling:
             self._cancel_bucket_fill()
+            self._draw_bucket_cursor(event.x, event.y)
 
     def _start_bucket_fill(self):
         if self.bucket_is_filling or self.bucket_is_full:
             return
         self.bucket_is_filling = True
-        self.bucket_fill_started_at = time.monotonic()
-        self.bucket_fill_progress = 0.0
-        self.bucket_fill_after_id = self.root.after(2000, self._finish_bucket_fill)
+        fill_duration_seconds = 2.0
+        self.bucket_fill_started_at = time.monotonic() - (self.bucket_fill_progress * fill_duration_seconds)
+        remaining_ms = max(1, int(round((1.0 - self.bucket_fill_progress) * fill_duration_seconds * 1000)))
+        self.bucket_fill_after_id = self.root.after(remaining_ms, self._finish_bucket_fill)
         self._tick_bucket_fill_animation()
 
     def _cancel_bucket_fill(self):
+        was_filling = self.bucket_is_filling
         self.bucket_is_filling = False
+        if was_filling:
+            elapsed = time.monotonic() - self.bucket_fill_started_at
+            self.bucket_fill_progress = max(0.0, min(1.0, elapsed / 2.0))
         if self.bucket_fill_after_id is not None:
             self.root.after_cancel(self.bucket_fill_after_id)
             self.bucket_fill_after_id = None
         if self.bucket_fill_anim_after_id is not None:
             self.root.after_cancel(self.bucket_fill_anim_after_id)
             self.bucket_fill_anim_after_id = None
-        self.bucket_fill_progress = 0.0
 
     def _finish_bucket_fill(self):
         self.bucket_fill_after_id = None
@@ -1123,7 +1149,7 @@ class ExperimentGame:
         return dx * dx + dy * dy <= self.left_sprinkler_clear_radius * self.left_sprinkler_clear_radius
 
     def show_end_overlay(self):
-        self.end_label.config(text=self._format_score())
+        self.end_label.config(text=self._format_final_score())
         if self.score <= 0:
             self.end_message_label.config(
                 text="V tomto kole se Vám nepodařilo uchránit žádné peníze."
@@ -1157,19 +1183,65 @@ class ExperimentGame:
         self.countdown_after_id = None
         self._refresh_countdown_overlay()
         self.game_started = True
-        self.root.after(500, self.schedule_next_fire)
+        self.root.after(FIRE_INTERVAL_MS, self.spawn_fire)
         self.root.after(1000, self.on_fire_tick)
         self.root.after(1000, self.on_timer_tick)
 
     def _refresh_countdown_overlay(self):
-        if not hasattr(self, "countdown_label"):
-            return
-        if not self.countdown_running or self.countdown_value <= 0:
+        if hasattr(self, "countdown_label"):
             self.countdown_label.place_forget()
+        if not self.countdown_running or self.countdown_value <= 0:
+            self._hide_countdown_overlay()
             return
-        self.countdown_label.config(text=str(self.countdown_value))
-        self.countdown_label.place(relx=0.5, rely=0.55, anchor="center")
-        self.countdown_label.lift()
+        if not hasattr(self, "left_canvas") or not hasattr(self, "right_canvas"):
+            return
+        self._ensure_countdown_overlay()
+        self._position_countdown_overlay()
+        if self.countdown_overlay_label is None:
+            return
+        self.countdown_overlay_label.config(text=str(self.countdown_value))
+        self.countdown_overlay_label.place(relx=0.5, rely=0.57, anchor="center")
+        self.countdown_overlay.deiconify()
+        self.countdown_overlay.lift()
+
+    def _ensure_countdown_overlay(self):
+        if self.countdown_overlay is not None and self.countdown_overlay.winfo_exists():
+            return
+        overlay = tk.Toplevel(self.root, bg=self.countdown_overlay_bg)
+        overlay.withdraw()
+        overlay.overrideredirect(True)
+        overlay.transient(self.root)
+        overlay.attributes("-topmost", True)
+        overlay.wm_attributes("-transparentcolor", self.countdown_overlay_bg)
+        label = tk.Label(
+            overlay,
+            text="",
+            font=("Georgia", 190, "bold"),
+            bg=self.countdown_overlay_bg,
+            fg="#000000",
+        )
+        self.countdown_overlay = overlay
+        self.countdown_overlay_label = label
+
+    def _position_countdown_overlay(self):
+        if self.countdown_overlay is None or not self.countdown_overlay.winfo_exists():
+            return
+        self.root.update_idletasks()
+        x = self.root.winfo_rootx()
+        y = self.root.winfo_rooty()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        if width <= 1 or height <= 1:
+            return
+        self.countdown_overlay.geometry(f"{width}x{height}+{x}+{y}")
+
+    def _hide_countdown_overlay(self):
+        if self.countdown_overlay is not None and self.countdown_overlay.winfo_exists():
+            self.countdown_overlay.withdraw()
+
+    def _on_root_configure(self, event=None):
+        if self.countdown_running and self.countdown_value > 0:
+            self._position_countdown_overlay()
 
     def end_game(self):
         if self.game_over:
@@ -1204,7 +1276,7 @@ class ExperimentGame:
         self.score = max(0, self.score + delta)
         self.score_label.config(text=self._format_score())
         if self.end_overlay.winfo_ismapped():
-            self.end_label.config(text=self._format_score())
+            self.end_label.config(text=self._format_final_score())
             if self.score <= 0:
                 self.end_message_label.config(
                     text="V tomto kole se Vám nepodařilo uchránit žádné peníze."
@@ -1218,7 +1290,7 @@ class ExperimentGame:
         if not self.game_started or self.game_over:
             return
         if not self.fires_paused and self.active_fires:
-            self.update_score(-1 * len(self.active_fires))
+            self.update_score(-FIRE_BURN_SCORE_PENALTY_PER_SECOND * len(self.active_fires))
         self.root.after(1000, self.on_fire_tick)
 
     def on_timer_tick(self):
@@ -1635,7 +1707,8 @@ class ExperimentGame:
             width=3 if self.bucket_is_filling else 2,
             tags="bucket_cursor"
         )
-        if self.bucket_is_filling:
+        show_partial_fill = self.bucket_is_filling or self.bucket_fill_progress > 0.0
+        if show_partial_fill:
             fill_height = int((body_h - 2) * self.bucket_fill_progress)
             water_top = rim_y + body_h - 1 - fill_height
             self.left_canvas.create_rectangle(
@@ -1647,29 +1720,30 @@ class ExperimentGame:
                 outline="",
                 tags="bucket_cursor"
             )
-            shimmer_x = bx - 5 + int((time.monotonic() * 24) % 9)
-            self.left_canvas.create_line(
-                shimmer_x,
-                water_top + 1,
-                shimmer_x + 5,
-                water_top + 1,
-                fill="#d8f3ff",
-                width=2,
-                tags="bucket_cursor"
-            )
-            pulse_extent = max(8, int(360 * self.bucket_fill_progress))
-            self.left_canvas.create_arc(
-                bx - 16,
-                rim_y - 18,
-                bx + 16,
-                rim_y + 14,
-                start=90,
-                extent=-pulse_extent,
-                style="arc",
-                outline="#ffffff",
-                width=3,
-                tags="bucket_cursor"
-            )
+            if self.bucket_is_filling:
+                shimmer_x = bx - 5 + int((time.monotonic() * 24) % 9)
+                self.left_canvas.create_line(
+                    shimmer_x,
+                    water_top + 1,
+                    shimmer_x + 5,
+                    water_top + 1,
+                    fill="#d8f3ff",
+                    width=2,
+                    tags="bucket_cursor"
+                )
+                pulse_extent = max(8, int(360 * self.bucket_fill_progress))
+                self.left_canvas.create_arc(
+                    bx - 16,
+                    rim_y - 18,
+                    bx + 16,
+                    rim_y + 14,
+                    start=90,
+                    extent=-pulse_extent,
+                    style="arc",
+                    outline="#ffffff",
+                    width=3,
+                    tags="bucket_cursor"
+                )
             self.left_canvas.create_text(
                 bx,
                 rim_y - 21,
@@ -1799,7 +1873,12 @@ class ExperimentGame:
         self._draw_right_scene()
 
     def _format_score(self):
-        return str(int(self.score))
+        crowns, halers = divmod(int(self.score), 100)
+        return f"{crowns},{halers:02d} K\u010d"
+
+    def _format_final_score(self):
+        rounded_crowns = (int(self.score) + 50) // 100
+        return f"{rounded_crowns} K\u010d"
 
     def _format_time(self, total_seconds):
         minutes = total_seconds // 60
