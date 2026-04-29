@@ -303,7 +303,7 @@ class LayoutTutorialGame(ExperimentGame):
             self.guide_title_label.config(text="Nahoře uprostřed vidíte, kolik peněz vám zbývá")
             self.guide_body_label.config(
                 text=(
-                    "Z této částky se průběžně odečítají ztráty. Za každý nový oheň zmizí 1,50 Kč. "
+                    "Z této částky se průběžně odečítají ztráty. Za každý nový oheň zmizí 0,85 Kč. "
                     "Za každou sekundu, kdy oheň hoří, zmizí dalších 0,04 Kč za každý aktivní oheň. "
                     "Čím déle necháte oheň hořet, tím rychleji peníze klesají."
                 )

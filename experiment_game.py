@@ -16,10 +16,10 @@ WATER_LABEL_COLOR = "#d7ebfb"
 RIGHT_UI_FONT = "Trebuchet MS"
 RIGHT_UI_FONT_ACCENT = "Palatino Linotype"
 
-FIRE_INTERVAL_MS = 4000
+FIRE_INTERVAL_MS = 3000
 FIRE_SIZE = 26  # diameter-ish
 SCORE_START = 10000  # halers = 100,00 Kc
-FIRE_SPAWN_SCORE_PENALTY = 150  # 1,50 Kc per new fire
+FIRE_SPAWN_SCORE_PENALTY = 85  # 0,85 Kc per new fire
 FIRE_BURN_SCORE_PENALTY_PER_SECOND = 4  # 0,04 Kc per second per active fire
 TIMER_SECONDS = 120
 
