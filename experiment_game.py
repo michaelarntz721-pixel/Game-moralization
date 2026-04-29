@@ -6,8 +6,8 @@ import tkinter as tk
 # ----------------------
 # Configuration
 # ----------------------
-WINDOW_WIDTH = 1200
-WINDOW_HEIGHT = 700
+WINDOW_WIDTH = 1280
+WINDOW_HEIGHT = 1024
 LEFT_BG = "#7bc96f"
 RIGHT_BG = "#f7f4ec"
 
@@ -76,7 +76,9 @@ class ExperimentGame:
             text="Stiskněte mezerník pro start",
             font=("Georgia", 20),
             bg=RIGHT_BG,
-            fg="#5a5a5a"
+            fg="#5a5a5a",
+            justify="center",
+            wraplength=1040,
         )
         self.start_hint_label.place(relx=0.5, rely=0.54, anchor="center")
 
@@ -96,7 +98,7 @@ class ExperimentGame:
             font=("Georgia", 22, "bold"),
             bg=RIGHT_BG,
             fg="#4f3c2f",
-            wraplength=900,
+            wraplength=1040,
             justify="center"
         )
         self.end_message_label.place(relx=0.5, rely=0.66, anchor="center")
@@ -411,6 +413,7 @@ class ExperimentGame:
         panel_bottom = int(min(h - 18, reservoir_top - 10))
         panel_top = max(dirt_top + 24, panel_bottom - 230)
         panel_center_x = (panel_left + panel_right) * 0.5
+        panel_text_width = max(120, panel_right - panel_left - 24)
         canvas.create_rectangle(
             panel_left,
             panel_top,
@@ -425,17 +428,19 @@ class ExperimentGame:
             panel_top + 18,
             text="OTOČTE VENTILY 1 AŽ 4",
             fill="#f7f1e3",
-            font=(RIGHT_UI_FONT_ACCENT, 13, "bold")
+            font=(RIGHT_UI_FONT, 11, "bold"),
         )
         canvas.create_text(
             panel_center_x,
-            panel_top + 36,
+            panel_top + 48,
             text="Každý ventil zvedne vodu o jednu úroveň.",
             fill="#f2dfc2",
-            font=(RIGHT_UI_FONT, 10, "normal")
+            font=(RIGHT_UI_FONT, 9, "normal"),
+            justify="center",
+            width=panel_text_width,
         )
         valve_center_x = panel_left + 36
-        valve_stack_top = panel_top + 70
+        valve_stack_top = panel_top + 92
         valve_stack_bottom = panel_bottom - 24
         valve_spacing = (valve_stack_bottom - valve_stack_top) / max(1, self.valve_total - 1)
         base_valve_radius = max(9, int(min(w, h) * 0.016))

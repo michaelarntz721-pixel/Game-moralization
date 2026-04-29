@@ -62,7 +62,7 @@ class LayoutTutorialGame(ExperimentGame):
             bg="#fff7df",
             fg="#4f3c2f",
             justify="left",
-            wraplength=760,
+            wraplength=860,
         )
         self.guide_body_label.pack(anchor="w", fill="x", pady=(12, 0))
         self.guide_hint_label = tk.Label(
@@ -72,7 +72,7 @@ class LayoutTutorialGame(ExperimentGame):
             bg="#fff7df",
             fg="#8b2f17",
             justify="center",
-            wraplength=760,
+            wraplength=860,
         )
         self.guide_hint_label.pack(anchor="center", pady=(14, 0))
 
@@ -126,7 +126,7 @@ class LayoutTutorialGame(ExperimentGame):
             ),
             font=("Trebuchet MS", 20, "bold"),
             fg="#4f3c2f",
-            wraplength=900,
+            wraplength=1040,
         )
         self.end_hint_label = tk.Label(
             self.end_overlay,
@@ -134,12 +134,21 @@ class LayoutTutorialGame(ExperimentGame):
             font=("Trebuchet MS", 16, "bold"),
             bg=RIGHT_BG,
             fg="#4f3c2f",
+            justify="center",
+            wraplength=1040,
         )
         self.end_hint_label.place(relx=0.5, rely=0.78, anchor="center")
 
         self.root.bind_all("<KeyPress-Return>", self.on_enter_press)
         self.root.bind_all("<KeyPress-KP_Enter>", self.on_enter_press)
+        self.guide_card.bind("<Configure>", self._resize_guide_wraps)
         self.root.after(120, self._prepare_demo_layout)
+
+    def _resize_guide_wraps(self, event=None):
+        card_width = event.width if event is not None else self.guide_card.winfo_width()
+        wraplength = max(700, min(900, card_width - 100))
+        self.guide_body_label.config(wraplength=wraplength)
+        self.guide_hint_label.config(wraplength=wraplength)
 
     def _prepare_demo_layout(self):
         self.left_canvas.update_idletasks()
@@ -219,6 +228,8 @@ class LayoutTutorialGame(ExperimentGame):
             text="Tady se objevují ohně a hasíte je kyblíkem.",
             fill="#4f3c2f",
             font=("Trebuchet MS", 13, "bold"),
+            justify="center",
+            width=max(200, x1 - x0 - 24),
             tags="tutorial_layout_left",
         )
 
@@ -252,6 +263,8 @@ class LayoutTutorialGame(ExperimentGame):
             text="Tady ovládáte zavlažovací systém.",
             fill="#4f3c2f",
             font=("Trebuchet MS", 13, "bold"),
+            justify="center",
+            width=max(200, x1 - x0 - 24),
             tags="tutorial_layout_right",
         )
 

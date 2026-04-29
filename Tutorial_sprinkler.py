@@ -65,8 +65,8 @@ class SprinklerTutorialGame(ExperimentGame):
         self.info_panel = tk.Frame(
             self.container,
             bg=RIGHT_BG,
-            padx=28,
-            pady=28,
+            padx=30,
+            pady=30,
         )
         self.info_panel.grid(row=0, column=0, sticky="nsew")
 
@@ -77,13 +77,13 @@ class SprinklerTutorialGame(ExperimentGame):
             bg=RIGHT_BG,
             fg="#37515e",
         )
-        self.title_label.pack(anchor="center", pady=(26, 22))
+        self.title_label.pack(anchor="center", pady=(20, 20))
 
-        self.instructions_wraplength = 420
+        self.instructions_wraplength = 520
         self.stage_blocks = []
         for _ in range(3):
             block = tk.Frame(self.info_panel, bg=RIGHT_BG)
-            block.pack(anchor="n", fill="x", pady=(0, 22))
+            block.pack(anchor="n", fill="x", pady=(0, 18))
 
             body_label = tk.Label(
                 block,
@@ -129,6 +129,8 @@ class SprinklerTutorialGame(ExperimentGame):
             font=("Trebuchet MS", 18, "bold"),
             bg=RIGHT_BG,
             fg="#2f78b2",
+            justify="center",
+            wraplength=1040,
         )
         self.end_label.place(relx=0.5, rely=0.54, anchor="center")
         self.end_hint = tk.Label(
@@ -137,6 +139,8 @@ class SprinklerTutorialGame(ExperimentGame):
             font=("Trebuchet MS", 16, "bold"),
             bg=RIGHT_BG,
             fg="#4f3c2f",
+            justify="center",
+            wraplength=1040,
         )
         self.end_hint.place(relx=0.5, rely=0.66, anchor="center")
 
@@ -155,6 +159,8 @@ class SprinklerTutorialGame(ExperimentGame):
             font=("Trebuchet MS", 18, "bold"),
             bg=RIGHT_BG,
             fg="#4f3c2f",
+            justify="center",
+            wraplength=1040,
         )
         self.start_hint_label.place(relx=0.5, rely=0.54, anchor="center")
         self.start_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
@@ -163,9 +169,20 @@ class SprinklerTutorialGame(ExperimentGame):
         self.root.bind_all("<KeyPress-space>", self.on_space_press)
         self.root.bind_all("<KeyPress-Return>", self.on_enter_press)
         self.root.bind_all("<KeyPress-KP_Enter>", self.on_enter_press)
+        self.info_panel.bind("<Configure>", self._resize_instruction_wraps)
         self.root.after(100, self.root.focus_force)
         self._update_stage_text()
         self._draw_right_scene()
+
+    def _resize_instruction_wraps(self, event=None):
+        panel_width = event.width if event is not None else self.info_panel.winfo_width()
+        wraplength = max(420, min(540, panel_width - 90))
+        if wraplength == self.instructions_wraplength:
+            return
+        self.instructions_wraplength = wraplength
+        for body_label, hint_label in self.stage_blocks:
+            body_label.config(wraplength=wraplength)
+            hint_label.config(wraplength=wraplength)
 
     def _update_stage_text(self):
         stage_texts = [
@@ -358,6 +375,8 @@ class SprinklerTutorialGame(ExperimentGame):
                 text="První segment je hotový. Pokračujte mezerníkem.",
                 fill="#f6e7d2",
                 font=("Trebuchet MS", 13, "bold"),
+                justify="center",
+                width=int(w * 0.62),
             )
 
     def _draw_target_arrow(self, valve_index):
