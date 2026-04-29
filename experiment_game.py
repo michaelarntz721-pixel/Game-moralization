@@ -1113,18 +1113,43 @@ class ExperimentGame:
         self.bucket_pour_after_id = self.root.after(45, self._tick_bucket_pour_animation)
 
     def _point_in_lake(self, x, y):
+        return self._bucket_overlaps_lake(x, y)
+
+    def _point_in_lake_area(self, x, y, padding=0):
         x0, y0, x1, y1 = self.lake_bounds
         if x1 <= x0 or y1 <= y0:
             return False
+        cx = (x0 + x1) * 0.5
+        cy = (y0 + y1) * 0.5
+        rx = ((x1 - x0) * 0.5) + padding
+        ry = ((y1 - y0) * 0.5) + padding
+        if rx <= 0 or ry <= 0:
+            return False
+        dx = (x - cx) / rx
+        dy = (y - cy) / ry
+        return dx * dx + dy * dy <= 1.0
+
+    def _bucket_overlaps_lake(self, x, y):
+        x0, y0, x1, y1 = self.lake_bounds
+        if x1 <= x0 or y1 <= y0:
+            return False
+
+        bucket_x0, bucket_y0, bucket_x1, bucket_y1 = self._bucket_cursor_bounds(x, y)
         cx = (x0 + x1) * 0.5
         cy = (y0 + y1) * 0.5
         rx = (x1 - x0) * 0.5
         ry = (y1 - y0) * 0.5
         if rx <= 0 or ry <= 0:
             return False
-        dx = (x - cx) / rx
-        dy = (y - cy) / ry
-        return dx * dx + dy * dy <= 1.0
+
+        normalized_bucket_x0 = (bucket_x0 - cx) / rx
+        normalized_bucket_x1 = (bucket_x1 - cx) / rx
+        normalized_bucket_y0 = (bucket_y0 - cy) / ry
+        normalized_bucket_y1 = (bucket_y1 - cy) / ry
+
+        closest_x = max(normalized_bucket_x0, min(0.0, normalized_bucket_x1))
+        closest_y = max(normalized_bucket_y0, min(0.0, normalized_bucket_y1))
+        return (closest_x * closest_x) + (closest_y * closest_y) <= 1.0
 
     def _point_in_lake_buffered(self, x, y, padding):
         x0, y0, x1, y1 = self.lake_bounds

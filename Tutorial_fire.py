@@ -212,8 +212,8 @@ class FireTutorialGame(ExperimentGame):
                 "Stiskněte mezerník a přejděte k nácviku plnění kyblíku.",
             ),
             (
-                "Kyblík naplníte tak, že najedete kurzorem nad jezero, stisknete tlačítko myši "
-                "a podržíte ho přibližně 2 vteřiny. Pokud tlačítko pustíte dříve, "
+                "Kyblík naplníte tak, že najedete kurzorem nad jezero, stisknete levé tlačítko myši "
+                "a podržíte ho 2 vteřiny. Pokud tlačítko pustíte dříve, "
                 "plnění se jen zastaví a po dalším stisku pokračuje od stejné úrovně.\n\n"
                 "Teď si plnění kyblíku vyzkoušejte.",
                 (

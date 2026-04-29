@@ -76,43 +76,21 @@ class LayoutTutorialGame(ExperimentGame):
         )
         self.guide_hint_label.pack(anchor="center", pady=(14, 0))
 
-        self.score_focus = tk.Frame(
+        self.score_focus = tk.Canvas(
             self.header,
-            bg="#fff7df",
-            highlightbackground="#c1121f",
-            highlightthickness=4,
+            bg=RIGHT_BG,
+            highlightthickness=0,
             bd=0,
         )
         self.score_focus.place_forget()
-        self.score_focus_label = tk.Label(
-            self.header,
-            text="PENÍZE",
-            font=("Trebuchet MS", 11, "bold"),
-            bg="#fff7df",
-            fg="#c1121f",
-            padx=10,
-            pady=2,
-        )
-        self.score_focus_label.place_forget()
 
-        self.timer_focus = tk.Frame(
+        self.timer_focus = tk.Canvas(
             self.header,
-            bg="#eef7ff",
-            highlightbackground="#2f78b2",
-            highlightthickness=4,
+            bg=RIGHT_BG,
+            highlightthickness=0,
             bd=0,
         )
         self.timer_focus.place_forget()
-        self.timer_focus_label = tk.Label(
-            self.header,
-            text="ČAS",
-            font=("Trebuchet MS", 11, "bold"),
-            bg="#eef7ff",
-            fg="#2f78b2",
-            padx=10,
-            pady=2,
-        )
-        self.timer_focus_label.place_forget()
 
         self.end_label.config(
             text="Layout máte hotový",
@@ -273,9 +251,7 @@ class LayoutTutorialGame(ExperimentGame):
         self.right_canvas.delete("tutorial_layout_right")
         self.guide_card.place_forget()
         self.score_focus.place_forget()
-        self.score_focus_label.place_forget()
         self.timer_focus.place_forget()
-        self.timer_focus_label.place_forget()
 
         if self.tutorial_stage < 0:
             return
@@ -295,8 +271,6 @@ class LayoutTutorialGame(ExperimentGame):
             self.guide_hint_label.config(
                 text="Stiskněte mezerník a ukážeme si přesně, kde se odečítají peníze."
             )
-            self._show_score_focus()
-            self._show_timer_focus()
             self._draw_left_overview_badge()
             self._draw_right_overview_badge()
         elif self.tutorial_stage == 1:
@@ -330,13 +304,77 @@ class LayoutTutorialGame(ExperimentGame):
         self.timer_label.lift()
 
     def _show_score_focus(self):
-        self.score_focus.place(relx=0.5, rely=0.55, anchor="center", width=250, height=78)
-        self.score_focus_label.place(relx=0.5, y=4, anchor="n")
+        self.score_focus.place(relx=0.30, rely=0.55, anchor="center", width=230, height=70)
+        self.score_focus.delete("all")
+        self.score_focus.create_text(
+            50,
+            15,
+            text="PENÍZE",
+            fill="#c1121f",
+            font=("Trebuchet MS", 13, "bold"),
+            anchor="center",
+        )
+        self.score_focus.create_line(
+            96,
+            17,
+            216,
+            34,
+            fill="#fff4d6",
+            width=13,
+            arrow="last",
+            arrowshape=(24, 28, 11),
+            capstyle="round",
+            joinstyle="round",
+        )
+        self.score_focus.create_line(
+            96,
+            17,
+            216,
+            34,
+            fill="#c1121f",
+            width=8,
+            arrow="last",
+            arrowshape=(22, 26, 10),
+            capstyle="round",
+            joinstyle="round",
+        )
         self.score_focus.lower(self.score_label)
 
     def _show_timer_focus(self):
-        self.timer_focus.place(relx=0.935, rely=0.55, anchor="center", width=122, height=54)
-        self.timer_focus_label.place(relx=0.935, y=4, anchor="n")
+        self.timer_focus.place(relx=0.82, rely=0.55, anchor="center", width=220, height=70)
+        self.timer_focus.delete("all")
+        self.timer_focus.create_text(
+            38,
+            15,
+            text="ČAS",
+            fill="#2f78b2",
+            font=("Trebuchet MS", 13, "bold"),
+            anchor="center",
+        )
+        self.timer_focus.create_line(
+            70,
+            17,
+            208,
+            34,
+            fill="#e5f7ff",
+            width=13,
+            arrow="last",
+            arrowshape=(24, 28, 11),
+            capstyle="round",
+            joinstyle="round",
+        )
+        self.timer_focus.create_line(
+            70,
+            17,
+            208,
+            34,
+            fill="#2f78b2",
+            width=8,
+            arrow="last",
+            arrowshape=(22, 26, 10),
+            capstyle="round",
+            joinstyle="round",
+        )
         self.timer_focus.lower(self.timer_label)
 
     def on_space_press(self, event=None):
@@ -375,9 +413,7 @@ class LayoutTutorialGame(ExperimentGame):
     def show_end_overlay(self):
         self.guide_card.place_forget()
         self.score_focus.place_forget()
-        self.score_focus_label.place_forget()
         self.timer_focus.place_forget()
-        self.timer_focus_label.place_forget()
         self.left_canvas.delete("tutorial_layout_left")
         self.right_canvas.delete("tutorial_layout_right")
         self.end_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
