@@ -193,19 +193,21 @@ class SprinklerTutorialGame(ExperimentGame):
                 "Stiskněte mezerník a přejděte k praktické ukázce.",
             ),
             (
-                "Ventil aktivujete tak, že na něj najedete myší a podržíte tlačítko 10 vteřin. "
-                "Když tlačítko pustíte dříve, průběh daného kroku se vynuluje a musíte začít znovu. "
+                "Ventil aktivujete tak, že na něj najedete myší, kliknete levým tlačítkem myši "
+                "a podržíte ho 15 vteřin. "
+                "Postup uvidíte na stoupajícím modrém sloupci vody v potrubí. "
                 "Ventily je potřeba aktivovat postupně podle čísel od 1 do 4.",
                 (
                     "První úroveň je hotová. Stiskněte mezerník a přejděte k závěrečnému kroku."
                     if self.first_segment_done
-                    else "Začněte ventilem 1 a zvedněte vodu do první úrovně."
+                    else "Začněte ventilem 1 a sledujte, jak modrá voda stoupá do první úrovně."
                 ),
             ),
             (
                 "Každý správně aktivovaný ventil zvýší hladinu vody o jednu úroveň. "
+                "Stoupající modrý sloupec vody ukazuje, jak blízko jste k dokončení aktuálního kroku. "
                 "Jakmile dokončíte i poslední ventil, systém získá plný tlak a zavlažovací systém se automaticky spustí.",
-                "Dokončete aktivaci ventilu 4 a sledujte spuštění zavlažování.",
+                "Dokončete aktivaci ventilu 4, sledujte stoupající vodu a potom spuštění zavlažování.",
             ),
         ]
 
@@ -297,8 +299,9 @@ class SprinklerTutorialGame(ExperimentGame):
         if valve_index is None or valve_index != self.completed_valves:
             return
         self.active_valve_index = valve_index
-        self.active_valve_start = self._monotonic()
-        self.active_valve_progress = 0.0
+        self.active_valve_start = self._monotonic() - (
+            self.active_valve_progress * (self.valve_hold_ms / 1000.0)
+        )
         if self.valve_hold_after_id is not None:
             self.root.after_cancel(self.valve_hold_after_id)
             self.valve_hold_after_id = None
@@ -336,9 +339,9 @@ class SprinklerTutorialGame(ExperimentGame):
     def _cancel_valve_hold(self):
         if self.active_valve_index is None:
             return
+        elapsed = self._monotonic() - self.active_valve_start
+        self.active_valve_progress = max(0.0, min(1.0, elapsed / (self.valve_hold_ms / 1000.0)))
         self.active_valve_index = None
-        self.active_valve_progress = 0.0
-        self.active_valve_start = 0.0
         if self.valve_hold_after_id is not None:
             self.root.after_cancel(self.valve_hold_after_id)
             self.valve_hold_after_id = None
@@ -357,8 +360,10 @@ class SprinklerTutorialGame(ExperimentGame):
 
         if self.tutorial_stage == 1 and not self.first_segment_done:
             self._draw_target_arrow(0)
+            self._draw_water_progress_arrow()
         elif self.tutorial_stage == 2 and not self.sprinkler_on:
             self._draw_target_arrow(3)
+            self._draw_water_progress_arrow()
 
         if self.tutorial_stage == 1 and self.first_segment_done:
             canvas.create_rectangle(
@@ -433,6 +438,91 @@ class SprinklerTutorialGame(ExperimentGame):
             label_y + 2,
             text="ZDE",
             fill="#d62828",
+            font=("Trebuchet MS", 13, "bold"),
+            anchor="w",
+            tags="tutorial_arrow",
+        )
+
+    def _draw_water_progress_arrow(self):
+        canvas = self.right_canvas
+        w = canvas.winfo_width()
+        h = canvas.winfo_height()
+        if w <= 1 or h <= 1:
+            return
+
+        ground_y = max(70, int(h * 0.2))
+        grass_h = max(14, int(h * 0.03))
+        dirt_top = ground_y + grass_h
+        pipe_x = w * 0.5
+        pipe_w = max(28, int(w * 0.08))
+        pipe_top = dirt_top + 10
+        pipe_bottom = int(h * 0.82)
+        riser_top = max(10, ground_y - 22)
+        level_spacing = (pipe_bottom - riser_top) / float(self.valve_total)
+        valve_ys = [pipe_bottom - (level_spacing * (idx + 1)) for idx in range(self.valve_total)]
+
+        if self.sprinkler_on:
+            target_y = riser_top
+        else:
+            water_stages = [pipe_bottom] + valve_ys
+            stage_index = min(self.completed_valves, self.valve_total - 1)
+            start_top = water_stages[stage_index]
+            end_top = water_stages[stage_index + 1]
+            progress = self.active_valve_progress
+            water_top = start_top + ((end_top - start_top) * progress)
+            target_y = water_top if progress > 0.04 else start_top - ((start_top - end_top) * 0.35)
+
+        target_y = max(riser_top + 10, min(pipe_bottom - 18, target_y))
+        start_x = pipe_x - pipe_w * 2.25
+        start_y = target_y - 44
+        end_x = pipe_x - pipe_w * 0.32
+        end_y = target_y
+        label_x = start_x - 4
+        label_y = start_y - 24
+        label_pad_x = 14
+        label_pad_y = 8
+
+        canvas.create_line(
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            fill="#e5f7ff",
+            width=11,
+            arrow="last",
+            arrowshape=(22, 24, 10),
+            capstyle="round",
+            joinstyle="round",
+            tags="tutorial_arrow",
+        )
+        canvas.create_line(
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            fill="#1479b8",
+            width=7,
+            arrow="last",
+            arrowshape=(20, 22, 9),
+            capstyle="round",
+            joinstyle="round",
+            tags="tutorial_arrow",
+        )
+        canvas.create_rectangle(
+            label_x - label_pad_x,
+            label_y - label_pad_y,
+            label_x + 78,
+            label_y + 14,
+            fill="#e5f7ff",
+            outline="#1479b8",
+            width=3,
+            tags="tutorial_arrow",
+        )
+        canvas.create_text(
+            label_x,
+            label_y + 2,
+            text="POSTUP",
+            fill="#1479b8",
             font=("Trebuchet MS", 13, "bold"),
             anchor="w",
             tags="tutorial_arrow",
