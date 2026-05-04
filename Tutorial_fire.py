@@ -217,17 +217,17 @@ class FireTutorialGame(ExperimentGame):
                 "plnění se jen zastaví a po dalším stisku pokračuje od stejné úrovně.\n\n"
                 "Teď si plnění kyblíku vyzkoušejte.",
                 (
-                    "Máte hotovo. Stiskněte mezerník a přejděte k hašení ohně."
+                    "Máte hotovo. Stiskněte mezerník a přejděte k hašení ohňů."
                     if self.bucket_fill_practiced
                     else "Najeďte nad jezero, podržte tlačítko a naplňte kyblík."
                 ),
             ),
             (
                 "Plný kyblík stačí vždy jen na uhašení jednoho ohně. "
-                "Po každém uhašení je proto potřeba vrátit se k jezeru a znovu ho naplnit. "
-                "V tomto kroku na vás čekají dva ohně, takže celý postup provedete dvakrát.\n\n"
+                "První oheň uhasíte vodou, kterou už máte z předchozího kroku. "
+                "Potom se vraťte k jezeru, kyblík znovu naplňte a uhaste druhý oheň.\n\n"
                 "Teď si zkuste celý postup v praxi.",
-                "Naplňte kyblík a uhaste oba ohně na louce.",
+                "Uhaste první oheň plným kyblíkem, potom naberte vodu a uhaste druhý.",
             ),
         ]
 
@@ -274,10 +274,10 @@ class FireTutorialGame(ExperimentGame):
         elif self.tutorial_stage == 1 and self.bucket_fill_practiced:
             self.tutorial_stage = 2
             self._cancel_bucket_fill()
-            self.bucket_is_full = False
+            self.bucket_is_full = True
             self.bucket_fill_progress = 0.0
-            self.left_canvas.delete("bucket_cursor")
             self._spawn_tutorial_fires()
+            self._draw_bucket_cursor(self.pointer_x, self.pointer_y)
             self._update_stage_text()
 
     def on_enter_press(self, event=None):
